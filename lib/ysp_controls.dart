@@ -1,0 +1,199 @@
+import 'package:flutter/material.dart';
+
+import 'live_playback.dart';
+import 'playback_preferences.dart';
+import 'ysp_live.dart';
+
+Future<void> showYspQualitySheet(
+  BuildContext context,
+  LivePlaybackController playback,
+) async {
+  final selected = await showModalBottomSheet<String>(
+    context: context,
+    showDragHandle: true,
+    builder: (context) => SafeArea(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const ListTile(title: Text('央视频画质')),
+          for (final quality in const ['auto', 'best', 'hd'])
+            ListTile(
+              selected: playback.quality == quality,
+              leading: Icon(
+                playback.quality == quality
+                    ? Icons.radio_button_checked
+                    : Icons.radio_button_off,
+              ),
+              title: Text(yspQualityLabel(quality)),
+              subtitle: Text(switch (quality) {
+                'best' => '优先高码率，取流失败时自动使用备用线路',
+                'hd' => '优先高清线路，适合快速换台或较慢网络',
+                _ => '先播放高清，停留 10 秒后尝试高码率',
+              }),
+              onTap: () => Navigator.pop(context, quality),
+            ),
+        ],
+      ),
+    ),
+  );
+  if (selected != null) await playback.setQuality(selected);
+}
+
+Future<void> showYspSpeedSheet(
+  BuildContext context,
+  LivePlaybackController playback,
+) async {
+  final selected = await showModalBottomSheet<double>(
+    context: context,
+    showDragHandle: true,
+    builder: (context) => SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            for (final speed in playbackSpeeds)
+              ChoiceChip(
+                label: Text('${speedLabel(speed)}x'),
+                selected: playback.speed == speed,
+                onSelected: (_) => Navigator.pop(context, speed),
+              ),
+          ],
+        ),
+      ),
+    ),
+  );
+  if (selected != null) await playback.setSpeed(selected);
+}
+
+Future<void> showYspCatchupSheet(
+  BuildContext context,
+  LivePlaybackController playback,
+) async {
+  final selected = await showModalBottomSheet<({DateTime start, DateTime end})>(
+    context: context,
+    showDragHandle: true,
+    isScrollControlled: true,
+    builder: (context) => _YspCatchupPicker(playback: playback),
+  );
+  if (selected != null) {
+    await playback.playCatchup(selected.start, selected.end);
+  }
+}
+
+class _YspCatchupPicker extends StatefulWidget {
+  const _YspCatchupPicker({required this.playback});
+
+  final LivePlaybackController playback;
+
+  @override
+  State<_YspCatchupPicker> createState() => _YspCatchupPickerState();
+}
+
+class _YspCatchupPickerState extends State<_YspCatchupPicker> {
+  late DateTime _start =
+      widget.playback.catchupStart ??
+      DateTime.now().subtract(const Duration(hours: 1));
+  late DateTime _end = widget.playback.catchupEnd ?? DateTime.now();
+  String? _error;
+
+  String _label(DateTime value) =>
+      '${value.year}-${value.month.toString().padLeft(2, '0')}-'
+      '${value.day.toString().padLeft(2, '0')} '
+      '${value.hour.toString().padLeft(2, '0')}:'
+      '${value.minute.toString().padLeft(2, '0')}';
+
+  Future<void> _pick({required bool start}) async {
+    final current = start ? _start : _end;
+    final now = DateTime.now();
+    final date = await showDatePicker(
+      context: context,
+      initialDate: current,
+      firstDate: now.subtract(const Duration(days: 7)),
+      lastDate: now,
+    );
+    if (date == null || !mounted) return;
+    final time = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay.fromDateTime(current),
+    );
+    if (time == null || !mounted) return;
+    final selected = DateTime(
+      date.year,
+      date.month,
+      date.day,
+      time.hour,
+      time.minute,
+    );
+    setState(() {
+      if (start) {
+        _start = selected;
+      } else {
+        _end = selected;
+      }
+      _error = null;
+    });
+  }
+
+  void _play() {
+    final now = DateTime.now();
+    if (!_end.isAfter(_start) ||
+        _start.isBefore(now.subtract(const Duration(days: 7))) ||
+        _end.isAfter(now.add(const Duration(minutes: 1)))) {
+      setState(() => _error = '请选择最近 7 天内的时间，结束时间须晚于开始时间。');
+      return;
+    }
+    Navigator.pop(context, (start: _start, end: _end));
+  }
+
+  @override
+  Widget build(BuildContext context) => SafeArea(
+    child: SingleChildScrollView(
+      padding: EdgeInsets.fromLTRB(
+        20,
+        8,
+        20,
+        20 + MediaQuery.viewInsetsOf(context).bottom,
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            '${widget.playback.channel?.name ?? '央视频'} · 7 天回看',
+            style: Theme.of(context).textTheme.titleLarge,
+          ),
+          const SizedBox(height: 12),
+          const Text('选择节目播放时间。可拖动进度、暂停及调整回看倍速。'),
+          const SizedBox(height: 16),
+          OutlinedButton.icon(
+            onPressed: () => _pick(start: true),
+            icon: const Icon(Icons.schedule),
+            label: Text('开始：${_label(_start)}'),
+          ),
+          const SizedBox(height: 10),
+          OutlinedButton.icon(
+            onPressed: () => _pick(start: false),
+            icon: const Icon(Icons.schedule),
+            label: Text('结束：${_label(_end)}'),
+          ),
+          if (_error != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 12),
+              child: Text(
+                _error!,
+                style: TextStyle(color: Theme.of(context).colorScheme.error),
+              ),
+            ),
+          const SizedBox(height: 20),
+          FilledButton.icon(
+            onPressed: _play,
+            icon: const Icon(Icons.replay),
+            label: const Text('播放回看'),
+          ),
+        ],
+      ),
+    ),
+  );
+}
