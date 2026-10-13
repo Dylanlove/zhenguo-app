@@ -77,6 +77,9 @@ class PlayerControls extends StatefulWidget {
     this.sleepTimerLabel = '',
     this.onCatchup,
     this.catchupActive = false,
+    this.autoHideDelay,
+    this.showProgress = true,
+    this.showMiniProgress = true,
     this.enhancement,
   });
 
@@ -102,6 +105,9 @@ class PlayerControls extends StatefulWidget {
   final String sleepTimerLabel;
   final Future<void> Function()? onCatchup;
   final bool catchupActive;
+  final Duration? autoHideDelay;
+  final bool showProgress;
+  final bool showMiniProgress;
   final double speed;
   final String qualityLabel;
   final VoidCallback onFocusSurface;
@@ -191,6 +197,7 @@ class _PlayerControlsState extends State<PlayerControls> {
     if (widget.enabled != oldWidget.enabled ||
         widget.panelOpen != oldWidget.panelOpen ||
         widget.fullscreen != oldWidget.fullscreen ||
+        widget.autoHideDelay != oldWidget.autoHideDelay ||
         widget.showOnPlaybackReady != oldWidget.showOnPlaybackReady) {
       widget.interactions.cancel(resumeScrub: true);
       if (widget.showOnPlaybackReady) {
@@ -240,7 +247,8 @@ class _PlayerControlsState extends State<PlayerControls> {
     _hideTimer?.cancel();
     _hideTimer = null;
     if (!_canAutoHide) return;
-    final delay = Duration(seconds: widget.fullscreen ? 4 : 3);
+    final delay =
+        widget.autoHideDelay ?? Duration(seconds: widget.fullscreen ? 4 : 3);
     _hideTimer = Timer(delay, () {
       _hideTimer = null;
       if (mounted && _canAutoHide) {
@@ -315,7 +323,10 @@ class _PlayerControlsState extends State<PlayerControls> {
   }
 
   bool get _miniProgressVisible =>
-      !_chromeVisible && widget.player.state.duration > Duration.zero;
+      widget.showProgress &&
+      widget.showMiniProgress &&
+      !_chromeVisible &&
+      widget.player.state.duration > Duration.zero;
 
   bool get _chromeVisible {
     if (widget.panelOpen || _panelActive) return true;
@@ -506,7 +517,10 @@ class _PlayerControlsState extends State<PlayerControls> {
             if (compact || widget.onRotate != null)
               _overlayIconButton(
                 tooltip: '旋转与全屏',
-                onPressed: widget.onRotate ?? widget.onFullscreen,
+                onPressed: () {
+                  (widget.onRotate ?? widget.onFullscreen)();
+                  _show();
+                },
                 icon: const PlayerRotationIcon(),
               ),
           ],
@@ -621,11 +635,12 @@ class _PlayerControlsState extends State<PlayerControls> {
               showVolume: showVolume,
               volume: volume,
             ),
-          _progressRow(
-            duration: duration,
-            position: position,
-            buffered: buffered,
-          ),
+          if (widget.showProgress)
+            _progressRow(
+              duration: duration,
+              position: position,
+              buffered: buffered,
+            ),
         ],
       ),
     );

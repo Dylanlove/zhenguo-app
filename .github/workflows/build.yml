@@ -43,6 +43,7 @@ jobs:
       - run: flutter pub get --enforce-lockfile
       - run: dart format --output=none --set-exit-if-changed lib test integration_test test_driver
       - run: dart analyze lib test integration_test test_driver
+      - run: flutter test --no-pub --dart-define=DISABLE_REMOTE_IMAGES=true test/player_navigation_test.dart
 
   android:
     needs: checks
@@ -101,6 +102,7 @@ jobs:
           retention-days: 30
   windows:
     needs: checks
+    if: needs.checks.outputs.release == 'true'
     runs-on: windows-latest
     timeout-minutes: 45
     strategy:

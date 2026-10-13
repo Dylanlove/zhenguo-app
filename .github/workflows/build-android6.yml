@@ -1,11 +1,8 @@
-name: Build Android 6 test packages and releases
+name: Build Android 6 formal releases
 
 on:
   push:
-    branches: ['**']
-    tags: ['android6-*']
-  pull_request:
-  workflow_dispatch:
+    tags: ['android6-[0-9]+.[0-9]+.[0-9]+']
 
 permissions:
   contents: read

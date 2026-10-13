@@ -1,7 +1,7 @@
 import 'dart:async';
-import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 
@@ -66,9 +66,16 @@ class _LivePlayerScreenState extends State<LivePlayerScreen> {
       onEpisode: _switchHint,
       onSeek: _playback.seek,
     );
-    if (Platform.isAndroid) {
-      SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
-    }
+    unawaited(_setSystemUi(true));
+  }
+
+  Future<void> _setSystemUi(bool immersive) async {
+    if (defaultTargetPlatform != TargetPlatform.android &&
+        defaultTargetPlatform != TargetPlatform.iOS)
+      return;
+    await SystemChrome.setEnabledSystemUIMode(
+      immersive ? SystemUiMode.immersiveSticky : SystemUiMode.edgeToEdge,
+    );
   }
 
   @override
@@ -109,9 +116,7 @@ class _LivePlayerScreenState extends State<LivePlayerScreen> {
     _rotated = true;
     setState(() => _landscape = !_landscape);
     await _applyOrientation();
-    if (Platform.isAndroid) {
-      await SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
-    }
+    if (mounted) await _setSystemUi(true);
   }
 
   @override
@@ -123,9 +128,7 @@ class _LivePlayerScreenState extends State<LivePlayerScreen> {
       (_orientationController?.releasePlayback(this) ?? Future<void>.value())
           .catchError((Object _) {}),
     );
-    if (Platform.isAndroid) {
-      SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
-    }
+    unawaited(_setSystemUi(false));
     super.dispose();
   }
 
@@ -137,11 +140,7 @@ class _LivePlayerScreenState extends State<LivePlayerScreen> {
     _interactions.seekEnabled = _playback.catchup;
     if (_followVideoRatio()) {
       unawaited(_applyOrientation());
-      if (Platform.isAndroid) {
-        unawaited(
-          SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky),
-        );
-      }
+      unawaited(_setSystemUi(true));
     }
     setState(() {});
   }
@@ -398,7 +397,10 @@ class _LivePlayerScreenState extends State<LivePlayerScreen> {
             enabled: error == null,
             panelOpen: _panel,
             fullscreen: true,
-            showOnPlaybackReady: false,
+            showOnPlaybackReady: true,
+            autoHideDelay: const Duration(seconds: 2),
+            showProgress: _playback.catchup,
+            showMiniProgress: false,
             title: title,
             onTogglePlayback: _toggle,
             swipeEnabled: true,
@@ -462,6 +464,25 @@ class _LivePlayerScreenState extends State<LivePlayerScreen> {
                 ),
               ),
             if (error == null) Focus(focusNode: _focus, child: controls),
+            if (error != null && !television)
+              SafeArea(
+                bottom: false,
+                child: Align(
+                  alignment: Alignment.topLeft,
+                  child: Padding(
+                    padding: const EdgeInsets.all(8),
+                    child: IconButton(
+                      tooltip: '返回',
+                      onPressed: _exit,
+                      style: IconButton.styleFrom(
+                        foregroundColor: Colors.white,
+                        backgroundColor: Colors.black54,
+                      ),
+                      icon: const Icon(Icons.arrow_back_ios_new_rounded),
+                    ),
+                  ),
+                ),
+              ),
           ],
         ),
       ),

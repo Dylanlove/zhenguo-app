@@ -1,8 +1,8 @@
 # 红果鉴 / 真果鉴
 
-Flutter 多端独立短剧应用，原名“短剧库 APP”。站源请求、解析、下载和播放均在设备上完成，不依赖旧项目或自建服务。当前源码版本：**0.2.153+2166（开发测试版）**。本轮启用 GitHub 测试包与正式 Release 双轨构建；包含 YSP Live v9.4 的频道、设备协议、四层取流兜底、回看、缓存与本地订阅服务，以及手机播放手势、顶部提示和旋转图标、Android 6 独立兼容构建与两版 Android 独立包名。
+Flutter 多端独立短剧应用，原名“短剧库 APP”。站源请求、解析、下载和播放均在设备上完成，不依赖旧项目或自建服务。当前源码版本：**0.2.154+2167（开发测试版）**。本轮修复直播控件、底部进度条与 iOS Home 指示条的隐藏，以及播放失败时的返回入口和 iOS 左侧右滑返回；测试构建缩减为两版 Android 8.0+ 三种 ABI 和 IPA，正式版范围保留。包含 YSP Live v9.4、手机播放手势、顶部提示、旋转图标和两版 Android 独立包名。
 
-公开仓库为 [youniube/zhenguo-app](https://github.com/youniube/zhenguo-app)。按用户 2026-10-13 的最新安排恢复安装包构建：普通提交生成测试包，正式版本标签才发布 Release。当前构建结果和测试包以 [GitHub Actions](https://github.com/youniube/zhenguo-app/actions) 为准。真实设备安装、视觉、播放、回看及站源验收仍待集中验证；历史版本构建记录不代表当前源码已通过设备验收。
+公开仓库为 [youniube/zhenguo-app](https://github.com/youniube/zhenguo-app)。普通提交只生成两版 Android 8.0+ 和 IPA 测试包；Windows 和 Android 6 兼容版仅在正式版本标签触发时构建，正式版本标签才发布 Release。当前构建结果和测试包以 [GitHub Actions](https://github.com/youniube/zhenguo-app/actions) 为准。真实设备安装、视觉、播放、回看及站源验收仍待集中验证；历史版本构建记录不代表当前源码已通过设备验收。
 
 | 编译方式 | 应用名称 | 可用站源 |
 | --- | --- | --- |
@@ -10,6 +10,8 @@ Flutter 多端独立短剧应用，原名“短剧库 APP”。站源请求、�
 | 构建脚本加 `--all-sources` | 真果鉴 | 红果、黄豆、剧果、野果、帝果、黄果视频、黄果 AI、黄果旧版、芽果、猫果、饭果、观果、河果、星果、花果、牛果、网果、发果、皮果、伍果 |
 
 直播入口按编译版本区分：默认红果鉴隐藏直播，在“关于红果鉴”输入 `Shineyue` 后激活；真果鉴默认显示直播，不需要激活码。
+
+0.2.154 起，手机直播在播放中显示控件后 2 秒自动隐藏，旋转后的横竖屏均适用；普通直播不显示进度条，回看进度只随完整控件显示，隐藏后不保留底部细线。iOS 直播进入和旋转时请求系统自动隐藏 Home 指示条，离开后恢复系统栏。短剧和直播播放失败时，错误遮罩上方保留可点击返回按钮；iOS 播放页使用系统侧滑返回，播放失败的全屏状态也允许左边缘右滑离开。修复的实际设备显示效果待体验确认。
 
 全站源版首页提供“全部站源 / 红果 / 黄豆 / 剧果 / 野果 / 帝果 / 黄果”及十二个新增短剧站源入口；全部站源只汇总当前用户获准的入口。剧果、野果、帝果作为独立站源；黄果统一汇总视频、AI 与旧 API 的分类和内容。0.2.26 起帝果入口恢复显示，保留 `dsd` 标识以兼容已有缓存、备份和同步记录。其余站源入口保留各自的权限、分页、独立更新和健康检测，可在站源管理中分别维护。已有受限用户不会自动获得新增站源权限，管理员可在用户管理中勾选。
 
@@ -19,7 +21,7 @@ Flutter 多端独立短剧应用，原名“短剧库 APP”。站源请求、�
 
 ### Android 6 兼容版
 
-兼容版通过独立工作流生成测试包；推送与源码版本一致的 `android6-major.minor.patch` 标签时发布正式 Release。包名为 `com.duanju.duanju_app.android6`，可与 Android 8+ 正式版并存。它使用旧版 Flutter / Gradle、API 23 原生核心和独立依赖解析，不改主版本的最低系统要求。
+兼容版只在推送与源码版本一致的 `android6-major.minor.patch` 正式标签时构建和发布，不随普通提交生成测试包。包名为 `com.duanju.duanju_app.android6`，可与 Android 8+ 正式版并存。它使用旧版 Flutter / Gradle、API 23 原生核心和独立依赖解析，不改主版本的最低系统要求。
 
 兼容版定位为低版本电视和手机的在线播放版，保留浏览、搜索、详情、选集和在线播放；下载、后台下载、本地合并、媒体导出、HEIC 海报转换及局域网自动发现不提供。应用名称带“兼容版”后缀，避免与正式版混淆。该版本只作为未验证开发快照，需待 GitHub Actions 构建完成后再进行 Android 6 实机验收。
 
@@ -675,14 +677,14 @@ SR-1、SR-2 与 SR-4 已接入源码，小型动漫 CNN 也包含在本轮；SR-
 
 ## 安装包与平台状态
 
-0.2.153+2166 使用新仓库的 Actions 构建开发测试包，下载入口和结果见工作流运行记录。主工作流覆盖两版 Android 三种 ABI、Windows x64 ZIP 和未签名 iOS IPA；兼容工作流覆盖 Android 6 红果鉴三种 ABI。0.2.51+57 的旧构建与 Release 记录、以下 0.2.15 数据均为历史记录，不代表本版已完成真实设备安装、启动、视觉、播放和站源验收。
+0.2.154+2167 使用新仓库的 Actions 构建开发测试包，下载入口和结果见工作流运行记录。普通提交覆盖两版 Android 8.0+ 三种 ABI 和未签名 iOS IPA，共 8 个安装包；正式版本主工作流继续包含 Windows x64 ZIP，共 10 个包，Android 6 正式版仍独立发布。0.2.153+2166 的 13 个测试包均已构建并校验。以下旧版本数据均为历史记录，不代表本版已完成真实设备安装、启动、视觉、播放和站源验收。
 
 0.2.15+21 已完成两版 Android ARM64 打包与安装包检查，签名与 0.2.10+16、0.2.14+20 一致，ARM64 分包版本码递增至 2021，可直接覆盖升级。此版本包含启动导航修复与首页多选、推荐、榜单的布局调整。Windows / iOS 完整应用仍待相应平台构建，本轮没有进行设备运行确认。
 
 | 平台 | 包与状态 |
 | --- | --- |
 | Android 8.0+ 手机 | `0.2.51+57` 两版 ARMv7 / ARM64 / x86_64 APK 已由 Actions 构建并发布，真实安装与运行仍待验收 |
-| Android 6.0+ 兼容版 | 独立红果鉴 APK，由兼容工作流生成测试包，正式 `android6-*` 标签才发布 Release；在线播放保留，下载与本地媒体处理不提供，实机验收待完成 |
+| Android 6.0+ 兼容版 | 独立红果鉴 APK，仅在正式 `android6-*` 标签时构建和发布；在线播放保留，下载与本地媒体处理不提供，实机验收待完成 |
 | Windows 10/11 x64 | `0.2.51+57` 两版完整 ZIP 已由 Actions 构建并发布；解压后分别运行 `hongguojian.exe` 或 `zhenguojian.exe`，保留所有 DLL 和 `data`；局域网原生发现依赖 Windows 10 1903+，包启动与设备互联仍待验证 |
 | Android TV | 与手机共用 `0.2.51+57` Android 包；已补强自动识别与电视模式横屏，待电视 / 盒子实机验收；0.2.12 选集 / 设置及 0.2.13 同步仍待集中验证 |
 | iOS 15.1+ | `0.2.51+57` 两版未签名 IPA 已由 Actions 构建并发布；0.2.40 起播放页禁用 media_kit_video 硬件纹理加速以规避 libmpv OpenGL ES 渲染上下文失败直接退出；仍待签名安装与真机验收 |
@@ -702,19 +704,19 @@ SR-1、SR-2 与 SR-4 已接入源码，小型动漫 CNN 也包含在本轮；SR-
 
 将 `guoapp` 源码发布到仓库根目录，保留 `.github`、锁文件、`native` 和平台工程；不用上传 SDK、依赖目录、SO、DLL 或缓存。
 
-推送任意分支、提交 PR，或手动运行 **Build test packages and releases**，会先检查再构建测试包；工作流使用提交 SHA 和运行记录定位每次构建。所有 Artifact 名称都带 `build-运行ID-尝试序号-` 前缀：
+推送任意分支、提交 PR，或手动运行 **Build test packages and releases**，会先检查再构建两版 Android 8.0+ 三种 ABI 和 IPA 测试包；Windows 任务跳过，Android 6 工作流不触发。工作流使用提交 SHA 和运行记录定位每次构建。所有 Artifact 名称都带 `build-运行ID-尝试序号-` 前缀：
 
 | 红果版 Artifact | 全站源版 Artifact | 内容 |
 | --- | --- | --- |
 | `hongguojian-android` | `zhenguojian-android` | 三种架构 APK 和 SHA256 |
-| `hongguojian-windows` | `zhenguojian-windows` | 完整 ZIP 和 SHA256；从解压包检查原生核心、FFprobe、换封装及播放器启动 |
+| `hongguojian-windows` | `zhenguojian-windows` | 仅正式版本构建完整 ZIP 和 SHA256 |
 | `hongguojian-ios-unsigned` | `zhenguojian-ios-unsigned` | 未签名 IPA 和 SHA256，需自行签名才能在 iPhone 安装 |
 
 Actions 分别传入默认参数与 `--all-sources` 构建两版。测试包保存在每次运行页面的 **Artifacts** 中，保留 30 天，下载需要登录 GitHub；普通提交和手动运行不会创建 Release。快速连续提交时旧的在途测试构建会被新提交替代。
 
-正式发布时先递增并提交 `pubspec.yaml` 的版本和构建号，再推送对应的 `vmajor.minor.patch` 标签，例如 `v0.2.153`。标签必须与源码版本一致；检查与 Android、Windows、iOS 全部构建成功后，独立发布任务一次性上传 10 个包和合并后的 `SHA256SUMS.txt`，使用 GitHub 自动生成更新记录。带 `-beta` / `-rc` 等后缀的标签只构建测试包。
+正式发布时先递增并提交 `pubspec.yaml` 的版本和构建号，再推送对应的 `vmajor.minor.patch` 标签，例如 `v0.2.154`。标签必须与源码版本一致；检查与 Android、Windows、iOS 全部构建成功后，独立发布任务一次性上传 10 个包和合并后的 `SHA256SUMS.txt`，使用 GitHub 自动生成更新记录。带 `-beta` / `-rc` 等后缀的标签只构建测试包。
 
-**Build Android 6 test packages and releases** 也在分支提交、PR 和手动运行时生成测试包。它使用 `pubspec.android6.yaml`、Flutter `3.35.7` 和 Android API 23 原生编译，产物为 `hongguojian-android6-版本-ABI.apk`，Artifact 后缀为 `hongguojian-android6`，保留 30 天。只有推送与兼容版版本一致的 `android6-major.minor.patch` 标签、且兼容构建成功后，才发布独立 Release。
+**Build Android 6 formal releases** 仅在推送 `android6-major.minor.patch` 正式标签时运行；标签必须与兼容版源码版本一致。它使用 `pubspec.android6.yaml`、Flutter `3.35.7` 和 Android API 23 原生编译，产物为 `hongguojian-android6-版本-ABI.apk`，Artifact 后缀为 `hongguojian-android6`，兼容构建成功后发布独立 Release。
 
 Android 正式发布按版本使用固定独立签名并递增构建号，在仓库 Secrets 配置：
 

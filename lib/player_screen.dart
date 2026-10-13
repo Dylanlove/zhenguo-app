@@ -1814,7 +1814,7 @@ class _PlayerScreenState extends State<PlayerScreen>
     final fullscreen = _showFullscreen;
     final pictureInPicture = _pictureInPictureVisible;
     return PopScope(
-      canPop: _television || !fullscreen,
+      canPop: _television || !fullscreen || _error != null,
       onPopInvokedWithResult: (didPop, result) {
         if (!didPop && fullscreen && !_television) {
           _rotate();
@@ -2091,24 +2091,44 @@ class _PlayerScreenState extends State<PlayerScreen>
                 ),
               if (_error != null &&
                   !hideOverlayForPictureInPicture &&
-                  _showFullscreen &&
+                  (_mobile || _showFullscreen) &&
                   !_television)
                 SafeArea(
+                  bottom: false,
                   child: Align(
                     alignment: Alignment.topCenter,
                     child: Row(
                       children: [
                         IconButton(
-                          tooltip: '退出全屏',
-                          onPressed: _rotate,
-                          icon: const Icon(Icons.arrow_back_rounded),
+                          tooltip: _showFullscreen ? '退出全屏' : '返回',
+                          onPressed: _back,
+                          style: IconButton.styleFrom(
+                            foregroundColor: Colors.white,
+                            backgroundColor: Colors.black54,
+                          ),
+                          icon: Icon(
+                            _showFullscreen
+                                ? Icons.arrow_back_rounded
+                                : Icons.arrow_back_ios_new_rounded,
+                          ),
                         ),
                         const Spacer(),
-                        TextButton(
-                          onPressed: () =>
-                              _openPanel(PlayerMenuSection.episodes),
-                          child: const Text('选集'),
-                        ),
+                        if (_showFullscreen)
+                          TextButton(
+                            onPressed: () =>
+                                _openPanel(PlayerMenuSection.episodes),
+                            child: const Text('选集'),
+                          )
+                        else
+                          IconButton(
+                            tooltip: '旋转与全屏',
+                            onPressed: _rotate,
+                            style: IconButton.styleFrom(
+                              foregroundColor: Colors.white,
+                              backgroundColor: Colors.black54,
+                            ),
+                            icon: const PlayerRotationIcon(),
+                          ),
                       ],
                     ),
                   ),
