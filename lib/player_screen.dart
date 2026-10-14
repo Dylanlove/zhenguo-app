@@ -128,7 +128,6 @@ class _PlayerScreenState extends State<PlayerScreen>
   bool _fullscreen = false;
   bool _automaticFullscreenSuppressed = false;
   bool _panelOpen = false;
-  int _mobileTab = 0;
   bool _autoAdvance = true;
   bool? _systemFullscreen;
   Orientation? _lastOrientation;
@@ -836,13 +835,14 @@ class _PlayerScreenState extends State<PlayerScreen>
         !_foreground ||
         widget.localOnly ||
         _plan?.local == true ||
-        _loading ||
-        _error != null ||
-        _openedIndex != _index ||
         widget.store.profileEpoch != _profileEpoch ||
         widget.store.locked ||
         _index + 1 >= widget.detail.episodes.length) {
       _preloader.clear();
+      return;
+    }
+    if (_loading || _error != null || _openedIndex != _index) {
+      _preloader.pause();
       return;
     }
     final state = _player.state;
@@ -858,9 +858,15 @@ class _PlayerScreenState extends State<PlayerScreen>
         state.buffer.inMilliseconds - position < 5000) {
       return;
     }
+    final upcoming = <Episode>[
+      for (var offset = 1;
+          offset <= 2 && _index + offset < widget.detail.episodes.length;
+          offset++)
+        widget.detail.episodes[_index + offset],
+    ];
     _preloader.prepare(
       widget.detail.drama,
-      widget.detail.episodes[_index + 1],
+      upcoming,
       quality: _requestedQuality,
     );
   }
@@ -1203,7 +1209,21 @@ class _PlayerScreenState extends State<PlayerScreen>
                 online: _forceOnline,
               )
             : null);
-    _preloader.clear();
+    if (_preloadEnabled && !widget.localOnly) {
+      _preloader.prepare(
+        widget.detail.drama,
+        [
+          for (var offset = 1;
+              offset <= 2 && index + offset < widget.detail.episodes.length;
+              offset++)
+            widget.detail.episodes[index + offset],
+        ],
+        quality: _requestedQuality,
+        start: false,
+      );
+    } else {
+      _preloader.clear();
+    }
     final ticket = ++_generation;
     _enhancement.suspend();
     _seekSequence++;
@@ -1892,15 +1912,15 @@ class _PlayerScreenState extends State<PlayerScreen>
                           );
                         }
                         if (_mobile) {
-                          final height = constraints.maxHeight * .56;
-                          return Column(
+                          return Stack(
+                            fit: StackFit.expand,
                             children: [
-                              SizedBox(
-                                height: height,
-                                width: double.infinity,
-                                child: _videoPane(context),
+                              _videoPane(context),
+                              Positioned(
+                                right: 10,
+                                bottom: 96,
+                                child: _mobileSideActions(),
                               ),
-                              Expanded(child: _mobilePlaybackPanel()),
                             ],
                           );
                         }
@@ -2169,83 +2189,187 @@ class _PlayerScreenState extends State<PlayerScreen>
     );
   }
 
-  Widget _mobilePlaybackPanel() {
-    final colors = Theme.of(context).colorScheme;
-    return ColoredBox(
-      color: Theme.of(context).scaffoldBackgroundColor,
-      child: SafeArea(
-        top: false,
-        child: Column(
-          children: [
-            _mobileTabs(colors),
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(8, 6, 8, 8),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(8),
-                  child: _mobileTab == 0
-                      ? _episodePanel(compact: true)
-                      : _mobileTab == 1
-                      ? _mobileSynopsis()
-                      : _mobileTab == 2
-                      ? _mobileRecommendations()
-                      : _mobileDownload(),
+  Widget _mobileSideActions() {
+    Widget action(String key, IconData icon, String label, VoidCallback onTap) =>
+        InkWell(
+          key: ValueKey(key),
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(12),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 44,
+                height: 44,
+                decoration: const BoxDecoration(
+                  color: Color(0x66000000),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(icon, color: Colors.white, size: 22),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                label,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 11,
+                  height: 1.2,
+                  shadows: [Shadow(color: Colors.black54, blurRadius: 4)],
                 ),
               ),
+            ],
+          ),
+        );
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        action(
+          'player-side-episodes',
+          Icons.grid_view_rounded,
+          '选集',
+          () => unawaited(_openMobileEpisodes()),
+        ),
+        const SizedBox(height: 16),
+        action(
+          'player-side-synopsis',
+          Icons.info_outline_rounded,
+          '简介',
+          () => unawaited(_openMobileSynopsisSheet()),
+        ),
+        const SizedBox(height: 16),
+        action(
+          'player-side-recommendations',
+          Icons.movie_filter_outlined,
+          '推荐',
+          () {
+            unawaited(_loadRecommendations());
+            unawaited(_openMobileRecommendationsSheet());
+          },
+        ),
+        const SizedBox(height: 16),
+        action(
+          'player-side-download',
+          Icons.download_rounded,
+          '下载',
+          () => unawaited(_openMobileDownloadSheet()),
+        ),
+      ],
+    );
+  }
+
+  Future<T?> _openMobileSheet<T>(
+    Widget Function(BuildContext sheetContext) builder,
+  ) async {
+    if (_panelOpen || _closed) return null;
+    _interactions.cancel();
+    setState(() => _panelOpen = true);
+    try {
+      return await showModalBottomSheet<T>(
+        context: context,
+        isScrollControlled: true,
+        backgroundColor: Colors.transparent,
+        builder: (sheetContext) => AnimatedBuilder(
+          animation: Listenable.merge([
+            _menuRevision,
+            widget.store,
+            _danmaku,
+            _preloader,
+          ]),
+          builder: (_, _) => Theme(
+            data: _showFullscreen ? AppTheme.dark : Theme.of(context),
+            child: builder(sheetContext),
+          ),
+        ),
+      );
+    } finally {
+      if (mounted && !_closed) {
+        setState(() => _panelOpen = false);
+        _playerFocus.requestFocus();
+      }
+    }
+  }
+
+  Widget _mobileSheetContainer(
+    BuildContext sheetContext,
+    Widget child, {
+    String? title,
+  }) {
+    final colors = Theme.of(sheetContext).colorScheme;
+    return SizedBox(
+      height: MediaQuery.sizeOf(sheetContext).height * .72,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: colors.surface,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+        ),
+        child: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(18, 4, 4, 0),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: title == null
+                        ? const SizedBox.shrink()
+                        : Text(
+                            title,
+                            style: Theme.of(
+                              sheetContext,
+                            ).textTheme.titleMedium,
+                          ),
+                  ),
+                  IconButton(
+                    key: const ValueKey('player-sheet-close'),
+                    tooltip: '关闭面板',
+                    onPressed: () => Navigator.pop(sheetContext),
+                    icon: const Icon(Icons.close_rounded),
+                  ),
+                ],
+              ),
             ),
+            Expanded(child: child),
           ],
         ),
       ),
     );
   }
 
-  Widget _mobileTabs(ColorScheme colors) => Padding(
-    padding: const EdgeInsets.fromLTRB(8, 2, 8, 0),
-    child: SizedBox(
-      height: 42,
-      child: Row(
-        children: [
-          _mobileTabButton(0, '选集'),
-          _mobileTabButton(1, '简介'),
-          _mobileTabButton(2, '推荐'),
-          _mobileTabButton(3, '下载'),
-        ],
-      ),
-    ),
-  );
-
-  Widget _mobileTabButton(int value, String label) {
-    final selected = _mobileTab == value;
-    final colors = Theme.of(context).colorScheme;
-    return Expanded(
-      child: InkWell(
-        onTap: () {
-          setState(() => _mobileTab = value);
-          if (value == 2) unawaited(_loadRecommendations());
-        },
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 120),
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            border: Border(
-              bottom: BorderSide(
-                color: selected ? colors.primary : Colors.transparent,
-                width: 2,
-              ),
-            ),
-          ),
-          child: Text(
-            label,
-            style: TextStyle(
-              color: selected ? colors.onSurface : colors.onSurfaceVariant,
-              fontSize: 13,
-              fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
-            ),
-          ),
+  Future<void> _openMobileEpisodes() async {
+    final index = await _openMobileSheet<int>(
+      (sheetContext) => _mobileSheetContainer(
+        sheetContext,
+        PlayerEpisodeGrid(
+          episodes: widget.detail.episodes,
+          currentIndex: _index,
+          onSelected: (index) => Navigator.pop(sheetContext, index),
         ),
       ),
     );
+    if (index != null && mounted && !_closed && index != _index) {
+      await _play(index);
+    }
   }
+
+  Future<void> _openMobileSynopsisSheet() => _openMobileSheet<void>(
+    (sheetContext) => _mobileSheetContainer(
+      sheetContext,
+      _mobileSynopsis(),
+      title: '简介',
+    ),
+  );
+
+  Future<void> _openMobileRecommendationsSheet() => _openMobileSheet<void>(
+    (sheetContext) => _mobileSheetContainer(
+      sheetContext,
+      _mobileRecommendations(),
+      title: '相关推荐',
+    ),
+  );
+
+  Future<void> _openMobileDownloadSheet() => _openMobileSheet<void>(
+    (sheetContext) =>
+        _mobileSheetContainer(sheetContext, _mobileDownload()),
+  );
 
   Widget _mobileRecommendations() {
     final colors = Theme.of(context).colorScheme;

@@ -151,6 +151,8 @@ void main() {
       expect(player.state.playing, isTrue);
       expect(find.text('正在准备播放'), findsNothing);
       final old = repository.danmakuCalls.single;
+      await tester.tap(find.text('选集'));
+      await settle(tester);
       await tester.tap(find.byKey(const ValueKey('play-episode-2')));
       await settle(tester);
       final current = repository.danmakuCalls.last;

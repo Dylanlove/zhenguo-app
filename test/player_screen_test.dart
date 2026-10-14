@@ -60,6 +60,12 @@ void main() {
     }
   }
 
+  Future<void> settleSheet(WidgetTester tester) async {
+    for (var i = 0; i < 36; i++) {
+      await tester.pump(const Duration(milliseconds: 16));
+    }
+  }
+
   Future<void> mount(
     WidgetTester tester,
     RouteRepository repository,
@@ -331,7 +337,7 @@ void main() {
   );
 
   testWidgets(
-    'fresh recommendations survive tab switches and reopening without searches',
+    'fresh recommendations survive sheet reopenings without searches',
     (tester) async {
       debugDefaultTargetPlatformOverride = TargetPlatform.android;
       try {
@@ -348,17 +354,19 @@ void main() {
         for (var opening = 0; opening < 2; opening++) {
           final player = ScriptedPlayer();
           await mount(tester, repository, player, size: const Size(390, 844));
-          for (var tab = 0; tab < 3; tab++) {
-            await tester.tap(find.text('推荐'));
-            await settleOperations(tester);
+          for (var round = 0; round < 3; round++) {
+            await tester.tap(
+              find.byKey(const ValueKey('player-side-recommendations')),
+            );
+            await settleSheet(tester);
             expect(
               find.byKey(const ValueKey('recommend-hongguo:100')),
               findsOneWidget,
             );
             expect(find.byType(LinearProgressIndicator), findsNothing);
             expect(find.byType(CircularProgressIndicator), findsNothing);
-            await tester.tap(find.text('选集'));
-            await settleOperations(tester);
+            await tester.tap(find.byKey(const ValueKey('player-sheet-close')));
+            await settleSheet(tester);
           }
           expect(repository.searches, isEmpty);
           await unmount(tester, player);
@@ -387,32 +395,40 @@ void main() {
         final repository = RecommendationRepository();
         final player = ScriptedPlayer();
         await mount(tester, repository, player, size: const Size(390, 844));
-        await tester.tap(find.text('推荐'));
-        await settleOperations(tester);
+        await tester.tap(
+          find.byKey(const ValueKey('player-side-recommendations')),
+        );
+        await settleSheet(tester);
         expect(
           find.byKey(const ValueKey('recommend-hongguo:100')),
           findsOneWidget,
         );
         expect(find.byType(LinearProgressIndicator), findsNothing);
         expect(find.byType(CircularProgressIndicator), findsNothing);
-        await tester.tap(find.text('选集'));
-        await tester.pump();
-        await tester.tap(find.text('推荐'));
+        await tester.tap(find.byKey(const ValueKey('player-sheet-close')));
+        await settleSheet(tester);
+        await tester.tap(
+          find.byKey(const ValueKey('player-side-recommendations')),
+        );
         await tester.pump();
         expect(repository.searches, hasLength(1));
         repository.searches.single.complete(
           CatalogPage([FixtureRepository.free]),
         );
-        await settleOperations(tester);
+        await settleSheet(tester);
         expect(
           cache.read('hongguo', FixtureRepository.free.title)?.fresh,
           isTrue,
         );
+        await tester.tap(find.byKey(const ValueKey('player-sheet-close')));
+        await settleSheet(tester);
         await unmount(tester, player);
         final reopened = ScriptedPlayer();
         await mount(tester, repository, reopened, size: const Size(390, 844));
-        await tester.tap(find.text('推荐'));
-        await settleOperations(tester);
+        await tester.tap(
+          find.byKey(const ValueKey('player-side-recommendations')),
+        );
+        await settleSheet(tester);
         expect(repository.searches, hasLength(1));
         await unmount(tester, reopened);
       } finally {
@@ -429,8 +445,10 @@ void main() {
         final repository = RecommendationRepository();
         final player = ScriptedPlayer();
         await mount(tester, repository, player, size: const Size(390, 844));
-        await tester.tap(find.text('推荐'));
-        await settleOperations(tester);
+        await tester.tap(
+          find.byKey(const ValueKey('player-side-recommendations')),
+        );
+        await settleSheet(tester);
         expect(find.byType(CircularProgressIndicator), findsNothing);
         expect(find.byType(LinearProgressIndicator), findsNothing);
         repository.partial = [FixtureRepository.free];
@@ -446,11 +464,15 @@ void main() {
           find.byKey(const ValueKey('recommend-hongguo:100')),
           findsNothing,
         );
+        await tester.tap(find.byKey(const ValueKey('player-sheet-close')));
+        await settleSheet(tester);
         await unmount(tester, player);
         final reopened = ScriptedPlayer();
         await mount(tester, repository, reopened, size: const Size(390, 844));
-        await tester.tap(find.text('推荐'));
-        await settleOperations(tester);
+        await tester.tap(
+          find.byKey(const ValueKey('player-side-recommendations')),
+        );
+        await settleSheet(tester);
         expect(repository.searches, hasLength(1));
         expect(find.text('暂无可推荐的相关剧集'), findsOneWidget);
         await unmount(tester, reopened);

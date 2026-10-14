@@ -225,7 +225,7 @@ void main() {
     );
   }
 
-  testWidgets('mobile player moves download and follow into tabs', (
+  testWidgets('mobile player moves download and follow into sheets', (
     tester,
   ) async {
     size(tester, const Size(390, 844));
@@ -260,6 +260,8 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('player-follow-status')), findsOneWidget);
     expect(find.text('加入追剧'), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('player-sheet-close')));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('下载'));
     await tester.pumpAndSettle();
     expect(find.text('下载选集'), findsOneWidget);
