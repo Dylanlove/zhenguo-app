@@ -117,8 +117,9 @@ class PlaybackPreloader extends ChangeNotifier {
   }) {
     final identity = _key(drama, episode, quality, online);
     final slot = _slots[identity];
-    final result =
-        slot != null && _now().isBefore(slot.expires) ? slot.ready : null;
+    final result = slot != null && _now().isBefore(slot.expires)
+        ? slot.ready
+        : null;
     if (slot != null) {
       _slots.remove(identity);
       if (!identical(result, slot.ready)) _release(slot.ready);

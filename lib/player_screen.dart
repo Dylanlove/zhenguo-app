@@ -859,9 +859,11 @@ class _PlayerScreenState extends State<PlayerScreen>
       return;
     }
     final upcoming = <Episode>[
-      for (var offset = 1;
-          offset <= 2 && _index + offset < widget.detail.episodes.length;
-          offset++)
+      for (
+        var offset = 1;
+        offset <= 2 && _index + offset < widget.detail.episodes.length;
+        offset++
+      )
         widget.detail.episodes[_index + offset],
     ];
     _preloader.prepare(
@@ -1213,9 +1215,11 @@ class _PlayerScreenState extends State<PlayerScreen>
       _preloader.prepare(
         widget.detail.drama,
         [
-          for (var offset = 1;
-              offset <= 2 && index + offset < widget.detail.episodes.length;
-              offset++)
+          for (
+            var offset = 1;
+            offset <= 2 && index + offset < widget.detail.episodes.length;
+            offset++
+          )
             widget.detail.episodes[index + offset],
         ],
         quality: _requestedQuality,
@@ -2190,36 +2194,40 @@ class _PlayerScreenState extends State<PlayerScreen>
   }
 
   Widget _mobileSideActions() {
-    Widget action(String key, IconData icon, String label, VoidCallback onTap) =>
-        InkWell(
-          key: ValueKey(key),
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(12),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 44,
-                height: 44,
-                decoration: const BoxDecoration(
-                  color: Color(0x66000000),
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(icon, color: Colors.white, size: 22),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                label,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 11,
-                  height: 1.2,
-                  shadows: [Shadow(color: Colors.black54, blurRadius: 4)],
-                ),
-              ),
-            ],
+    Widget action(
+      String key,
+      IconData icon,
+      String label,
+      VoidCallback onTap,
+    ) => InkWell(
+      key: ValueKey(key),
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 44,
+            height: 44,
+            decoration: const BoxDecoration(
+              color: Color(0x66000000),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(icon, color: Colors.white, size: 22),
           ),
-        );
+          const SizedBox(height: 4),
+          Text(
+            label,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 11,
+              height: 1.2,
+              shadows: [Shadow(color: Colors.black54, blurRadius: 4)],
+            ),
+          ),
+        ],
+      ),
+    );
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -2313,9 +2321,7 @@ class _PlayerScreenState extends State<PlayerScreen>
                         ? const SizedBox.shrink()
                         : Text(
                             title,
-                            style: Theme.of(
-                              sheetContext,
-                            ).textTheme.titleMedium,
+                            style: Theme.of(sheetContext).textTheme.titleMedium,
                           ),
                   ),
                   IconButton(
@@ -2351,11 +2357,8 @@ class _PlayerScreenState extends State<PlayerScreen>
   }
 
   Future<void> _openMobileSynopsisSheet() => _openMobileSheet<void>(
-    (sheetContext) => _mobileSheetContainer(
-      sheetContext,
-      _mobileSynopsis(),
-      title: '简介',
-    ),
+    (sheetContext) =>
+        _mobileSheetContainer(sheetContext, _mobileSynopsis(), title: '简介'),
   );
 
   Future<void> _openMobileRecommendationsSheet() => _openMobileSheet<void>(
@@ -2367,8 +2370,7 @@ class _PlayerScreenState extends State<PlayerScreen>
   );
 
   Future<void> _openMobileDownloadSheet() => _openMobileSheet<void>(
-    (sheetContext) =>
-        _mobileSheetContainer(sheetContext, _mobileDownload()),
+    (sheetContext) => _mobileSheetContainer(sheetContext, _mobileDownload()),
   );
 
   Widget _mobileRecommendations() {
