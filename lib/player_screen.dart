@@ -1916,17 +1916,7 @@ class _PlayerScreenState extends State<PlayerScreen>
                           );
                         }
                         if (_mobile) {
-                          return Stack(
-                            fit: StackFit.expand,
-                            children: [
-                              _videoPane(context),
-                              Positioned(
-                                right: 10,
-                                bottom: 96,
-                                child: _mobileSideActions(),
-                              ),
-                            ],
-                          );
+                          return _videoPane(context);
                         }
                         final height = (constraints.maxWidth / _aspectRatio)
                             .clamp(0.0, constraints.maxHeight * .64);
@@ -2017,6 +2007,9 @@ class _PlayerScreenState extends State<PlayerScreen>
             onNext: _index + 1 < widget.detail.episodes.length
                 ? () => _play(_index + 1)
                 : null,
+            sideActions: _mobile && !_showFullscreen
+                ? _mobileSideActions()
+                : const <PlayerSideAction>[],
           );
     final layeredControls = Stack(
       fit: StackFit.expand,
@@ -2193,76 +2186,36 @@ class _PlayerScreenState extends State<PlayerScreen>
     );
   }
 
-  Widget _mobileSideActions() {
-    Widget action(
-      String key,
-      IconData icon,
-      String label,
-      VoidCallback onTap,
-    ) => InkWell(
-      key: ValueKey(key),
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(12),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: 44,
-            height: 44,
-            decoration: const BoxDecoration(
-              color: Color(0x66000000),
-              shape: BoxShape.circle,
-            ),
-            child: Icon(icon, color: Colors.white, size: 22),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            label,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 11,
-              height: 1.2,
-              shadows: [Shadow(color: Colors.black54, blurRadius: 4)],
-            ),
-          ),
-        ],
+  List<PlayerSideAction> _mobileSideActions() {
+    return [
+      PlayerSideAction(
+        key: const ValueKey('player-side-episodes'),
+        tooltip: '选集',
+        icon: Icons.grid_view_rounded,
+        onTap: () => unawaited(_openMobileEpisodes()),
       ),
-    );
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        action(
-          'player-side-episodes',
-          Icons.grid_view_rounded,
-          '选集',
-          () => unawaited(_openMobileEpisodes()),
-        ),
-        const SizedBox(height: 16),
-        action(
-          'player-side-synopsis',
-          Icons.info_outline_rounded,
-          '简介',
-          () => unawaited(_openMobileSynopsisSheet()),
-        ),
-        const SizedBox(height: 16),
-        action(
-          'player-side-recommendations',
-          Icons.movie_filter_outlined,
-          '推荐',
-          () {
-            unawaited(_loadRecommendations());
-            unawaited(_openMobileRecommendationsSheet());
-          },
-        ),
-        const SizedBox(height: 16),
-        action(
-          'player-side-download',
-          Icons.download_rounded,
-          '下载',
-          () => unawaited(_openMobileDownloadSheet()),
-        ),
-      ],
-    );
+      PlayerSideAction(
+        key: const ValueKey('player-side-synopsis'),
+        tooltip: '简介',
+        icon: Icons.info_outline_rounded,
+        onTap: () => unawaited(_openMobileSynopsisSheet()),
+      ),
+      PlayerSideAction(
+        key: const ValueKey('player-side-recommendations'),
+        tooltip: '推荐',
+        icon: Icons.movie_filter_outlined,
+        onTap: () {
+          unawaited(_loadRecommendations());
+          unawaited(_openMobileRecommendationsSheet());
+        },
+      ),
+      PlayerSideAction(
+        key: const ValueKey('player-side-download'),
+        tooltip: '下载',
+        icon: Icons.download_rounded,
+        onTap: () => unawaited(_openMobileDownloadSheet()),
+      ),
+    ];
   }
 
   Future<T?> _openMobileSheet<T>(

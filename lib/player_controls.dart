@@ -41,6 +41,20 @@ class PlayerStatusMessage extends StatelessWidget {
   );
 }
 
+class PlayerSideAction {
+  const PlayerSideAction({
+    required this.key,
+    required this.tooltip,
+    required this.icon,
+    required this.onTap,
+  });
+
+  final Key key;
+  final String tooltip;
+  final IconData icon;
+  final VoidCallback onTap;
+}
+
 class PlayerControls extends StatefulWidget {
   const PlayerControls({
     super.key,
@@ -81,6 +95,7 @@ class PlayerControls extends StatefulWidget {
     this.showProgress = true,
     this.showMiniProgress = true,
     this.enhancement,
+    this.sideActions = const <PlayerSideAction>[],
   });
 
   final Player player;
@@ -123,6 +138,7 @@ class PlayerControls extends StatefulWidget {
   final Future<void> Function()? onPush;
   final Future<void> Function()? onPictureInPicture;
   final VideoEnhancementController? enhancement;
+  final List<PlayerSideAction> sideActions;
 
   @override
   State<PlayerControls> createState() => _PlayerControlsState();
@@ -590,12 +606,27 @@ class _PlayerControlsState extends State<PlayerControls> {
   );
 
   Widget _sideDanmakuControl() {
-    if (!widget.showDanmaku) return const SizedBox.shrink();
+    if (!widget.showDanmaku && widget.sideActions.isEmpty) {
+      return const SizedBox.shrink();
+    }
+    final tools = [
+      for (final action in widget.sideActions)
+        _toolIcon(
+          key: action.key,
+          tooltip: action.tooltip,
+          icon: action.icon,
+          onPressed: widget.enabled ? action.onTap : null,
+        ),
+      if (widget.showDanmaku) _danmakuTool(),
+    ];
+    final grouped = widget.sideActions.isNotEmpty;
     return Align(
-      alignment: Alignment.centerRight,
+      alignment: grouped ? Alignment.bottomRight : Alignment.centerRight,
       child: Padding(
-        padding: EdgeInsets.only(right: widget.swipeEnabled ? 0 : 4),
-        child: _danmakuTool(),
+        padding: grouped
+            ? const EdgeInsets.only(right: 2, bottom: 88)
+            : EdgeInsets.only(right: widget.swipeEnabled ? 0 : 4),
+        child: _toolGroup(tools),
       ),
     );
   }
