@@ -20,12 +20,9 @@ class SourceSite {
       duanjuPaged;
   bool get duanjuPaged => const {
     'yaguo',
-    'guanguo',
     'huaguo',
-    'niuguo',
     'wuguo',
     'maoguo',
-    'fanguo',
     'heguo',
     'xingguo',
     'chaoguo',
@@ -57,12 +54,9 @@ class SourceSite {
   static const duanjuValues = [
     SourceSite('yaguo', '芽果', '星芽短剧 · 登录接口'),
     SourceSite('maoguo', '猫果', '七猫短剧 · 签名接口'),
-    SourceSite('fanguo', '饭果', '西饭短剧 · 搜索接口'),
-    SourceSite('guanguo', '观果', '围观短剧 · 分类接口'),
     SourceSite('heguo', '河果', '河马剧场 · 网页接口'),
     SourceSite('xingguo', '星果', '星星短剧 · 连载接口'),
     SourceSite('huaguo', '花果', '花生短剧 · 网页目录'),
-    SourceSite('niuguo', '牛果', '牛牛短剧 · 分类接口'),
     SourceSite('wuguo', '伍果', '五五短剧 · 网页目录'),
     SourceSite('chaoguo', '超果', '超短剧 · AI 成人短剧', adult: true),
     SourceSite('miguo', '米果', '大米星球 · 网页目录'),

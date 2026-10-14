@@ -2,8 +2,6 @@ package core
 
 import (
 	"context"
-	"crypto/aes"
-	"encoding/base64"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -34,8 +32,8 @@ func TestDuanjuRegistryKeepsDistinctIdentitiesFromExistingSources(t *testing.T) 
 	for _, source := range existing {
 		seen[source] = true
 	}
-	if len(duanjuProviderCatalog) != 27 {
-		t.Fatalf("duanju catalog should register 27 sources, got %d", len(duanjuProviderCatalog))
+	if len(duanjuProviderCatalog) != 23 {
+		t.Fatalf("duanju catalog should register 23 sources, got %d", len(duanjuProviderCatalog))
 	}
 	for _, spec := range duanjuProviderCatalog {
 		if seen[spec.ID] {
@@ -106,42 +104,6 @@ func TestDuanjuYaguoParsesCatalogDetailAndSearch(t *testing.T) {
 	found, err := d.searchYaguo(context.Background(), "样本")
 	if err != nil || len(found) != 1 || found[0].ID != "yaguo:77" {
 		t.Fatalf("yaguo search failed: %+v %v", found, err)
-	}
-}
-
-func TestDuanjuGuanguoPostsJSONBodyAndReadsEpisodes(t *testing.T) {
-	d, server := duanjuFixtureDownloader(t, func(writer http.ResponseWriter, request *http.Request) {
-		writer.Header().Set("Content-Type", "application/json")
-		if request.Method != http.MethodPost {
-			t.Errorf("guanguo catalog must use POST, got %s", request.Method)
-		}
-		if !strings.Contains(request.URL.Path, "/drama/home/search") {
-			http.NotFound(writer, request)
-			return
-		}
-		var payload map[string]any
-		if err := json.NewDecoder(request.Body).Decode(&payload); err != nil {
-			t.Errorf("guanguo body is not JSON: %v", err)
-		}
-		if payload["pageSize"] != float64(30) {
-			t.Errorf("guanguo payload page size is wrong: %+v", payload)
-		}
-		_, _ = writer.Write([]byte(`{"code":200,"msg":"success","data":[{"title":"九转星辰诀","oneId":"110000042659853849","shortPlayTag":["玄幻仙侠"],"viewCount":658970,"description":"天才少年","horzPoster":"https://pic.cdn.example.cn/a.jpg","episodeCount":81}]}`))
-	})
-	d.providerHosts[sourceGuanguo] = server.URL
-
-	items, _, err := d.fetchGuanguoCatalogPage(context.Background(), 1, "")
-	if err != nil || len(items) != 1 {
-		t.Fatalf("guanguo catalog failed: %+v %v", items, err)
-	}
-	if items[0].ID != "guanguo:110000042659853849" || items[0].EpisodeCount != json.Number("81") {
-		t.Fatalf("guanguo catalog is wrong: %+v", items[0])
-	}
-	if items[0].Views != "65.9万次播放" {
-		t.Fatalf("guanguo views text is wrong: %q", items[0].Views)
-	}
-	if items[0].Cover != "https://pic.cdn.example.cn/a.jpg" {
-		t.Fatalf("guanguo cover is wrong: %q", items[0].Cover)
 	}
 }
 
@@ -253,48 +215,6 @@ func TestDuanjuMaccmsPlayerIgnoresBuiltInSampleClip(t *testing.T) {
 	}
 }
 
-func TestDuanjuNiuguoDecryptsResponseWithRequestURIKey(t *testing.T) {
-	payload := `{"status":0,"msg":"ok","data":[{"vod_id":575258,"vod_name":"牛果样本","vod_pic":"https://pic.example.cn/a.jpg","vod_remarks":"已完结","vod_douban_score":"4.5"}]}`
-	block, err := aes.NewCipher(niuguoDecryptKey("/list?class=&ord"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	padded := pkcs7Pad([]byte(payload), aes.BlockSize)
-	encrypted := make([]byte, len(padded))
-	for offset := 0; offset < len(padded); offset += aes.BlockSize {
-		block.Encrypt(encrypted[offset:offset+aes.BlockSize], padded[offset:offset+aes.BlockSize])
-	}
-	encoded := base64.StdEncoding.EncodeToString(encrypted)
-
-	decoded, err := niuguoDecryptResponse([]byte(encoded), niuguoDecryptKey("/list?class=&ord"))
-	if err != nil {
-		t.Fatalf("niuguo decrypt failed: %v", err)
-	}
-	items := niuguoCatalogItems(decoded, "https://ccc.example.cn")
-	if len(items) != 1 || items[0].ID != "niuguo:575258" {
-		t.Fatalf("niuguo catalog items are wrong: %+v", items)
-	}
-	if items[0].DisplayTitle() != "牛果样本" || items[0].Remark != "已完结" {
-		t.Fatalf("niuguo drama metadata is wrong: %+v", items[0])
-	}
-	if _, err := niuguoDecryptResponse([]byte(encoded), niuguoDecryptKey("/list?class=都市&ord")); err == nil {
-		t.Fatal("niuguo accepted the wrong request key")
-	}
-	if _, err := niuguoDecryptResponse([]byte("not base64!!"), niuguoDecryptKey("/list?class=&ord")); err == nil {
-		t.Fatal("niuguo accepted invalid base64")
-	}
-}
-
-func TestDuanjuNiuguoRequestURIUsesEscapedQuery(t *testing.T) {
-	address := "https://ccc.example.cn/list?class=&order=%E6%9C%80%E6%96%B0&page=1"
-	if got := niuguoRequestURI(address); got != "/list?class=&order=%E6%9C%80%E6%96%B0&page=1" {
-		t.Fatalf("niuguo request uri is wrong: %q", got)
-	}
-	if got := niuguoDecryptKey(niuguoRequestURI(address)); string(got) != "/list?class=&ord" {
-		t.Fatalf("niuguo key derivation is wrong: %q", got)
-	}
-}
-
 func TestDuanjuMaccmsAcceptsHashedClassNamesAndWidenedEpisodes(t *testing.T) {
 	document, err := html.Parse(strings.NewReader(`<html><body>
 	<ul id="home1" class="_9dbe81752a1dbf17-vodlist clearfix">
@@ -385,7 +305,7 @@ func TestDuanjuHeguoParsesNextDataWrappedResponses(t *testing.T) {
 }
 
 func TestDuanjuSearchAndPagingSupportMatchesCatalog(t *testing.T) {
-	supported := []string{sourceYaguo, sourceMaoguo, sourceFanguo, sourceGuanguo, sourceHeguo, sourceXingguo, sourceHuaguo, sourceNiuguo, sourceWuguo}
+	supported := []string{sourceYaguo, sourceMaoguo, sourceHeguo, sourceXingguo, sourceHuaguo, sourceWuguo}
 	for _, source := range supported {
 		if !duanjuSupportsSearch(source) {
 			t.Fatalf("%s should support online search", source)
@@ -408,7 +328,7 @@ func TestDuanjuBrowseAllSourcesKeepOneFeed(t *testing.T) {
 	if !duanjuBrowsesAllInOneFeed(sourceYaguo) {
 		t.Fatal("yaguo pages its whole catalog through the empty feed")
 	}
-	for _, source := range []string{sourceMaoguo, sourceFanguo, sourceHeguo, sourceXingguo} {
+	for _, source := range []string{sourceMaoguo, sourceHeguo, sourceXingguo} {
 		if duanjuBrowsesAllInOneFeed(source) {
 			t.Fatalf("%s only exposes part of its catalog without a category", source)
 		}
@@ -455,14 +375,14 @@ func TestDuanjuRejectsMismatchedSourceIDsAndCategories(t *testing.T) {
 	if split, _, ok := splitProviderDramaID("unknown:1"); ok {
 		t.Fatalf("duanju accepted an unknown source: %q", split)
 	}
-	if validDuanjuCategory(sourceGuanguo, "../etc") || validDuanjuCategory(sourceMaoguo, "a|b") {
+	if validDuanjuCategory(sourceHeguo, "../etc") || validDuanjuCategory(sourceMaoguo, "a|b") {
 		t.Fatal("duanju accepted an invalid category")
 	}
-	if !validDuanjuCategory(sourceGuanguo, "462") || !validDuanjuCategory(sourceHeguo, "417-464") {
+	if !validDuanjuCategory(sourceHeguo, "462") || !validDuanjuCategory(sourceHeguo, "417-464") {
 		t.Fatal("duanju rejected a valid numeric category")
 	}
-	if !validDuanjuCategory(sourceFanguo, "都市") {
-		t.Fatal("fanguo should accept a chinese category")
+	if !validDuanjuCategory(sourceWuguo, "都市") {
+		t.Fatal("wuguo should accept a chinese category")
 	}
 }
 
@@ -493,35 +413,6 @@ func TestDuanjuNormalizePlaybackURLStripsTrailingPunctuation(t *testing.T) {
 	}
 	if got := maccmsNormalizePlaybackURL(","); got != "" {
 		t.Fatalf("punctuation-only input should normalize to empty, got %q", got)
-	}
-}
-
-func TestDuanjuNiuguoResolverRejectsMissingEpisodeID(t *testing.T) {
-	d := &Downloader{cfg: Config{Retries: 1}, limiter: newRequestLimiter(2, 0), providerHosts: map[string]string{}}
-	_, err := d.resolveNiuguoMedia(context.Background(), Task{Chapter: Chapter{Source: sourceNiuguo}})
-	if err == nil {
-		t.Fatal("niuguo resolver accepted an empty episode id")
-	}
-	if !strings.Contains(err.Error(), "解析 ID") {
-		t.Fatalf("niuguo resolver error is unhelpful: %v", err)
-	}
-}
-
-func TestDuanjuGuanguoEmptyDetailIsReportedAsUpstream(t *testing.T) {
-	d, _ := duanjuFixtureDownloader(t, func(writer http.ResponseWriter, request *http.Request) {
-		if !strings.Contains(request.URL.Path, "shortVideoDetail") {
-			writer.WriteHeader(http.StatusNotFound)
-			return
-		}
-		writer.Header().Set("Content-Type", "application/json; charset=utf-8")
-		_, _ = writer.Write([]byte(`{"code":200,"msg":"success","data":null,"title":null}`))
-	})
-	_, _, err := d.fetchGuanguoDetail(context.Background(), "110000042659853849")
-	if err == nil {
-		t.Fatal("guanguo empty detail should fail")
-	}
-	if !strings.Contains(err.Error(), "返回空数据") {
-		t.Fatalf("guanguo empty detail error should blame upstream, got %v", err)
 	}
 }
 
@@ -667,78 +558,6 @@ func TestXingguoWalkDrivesTheWholeCatalogUpdate(t *testing.T) {
 	categories := d.providerCatalogCategories(context.Background(), sourceXingguo)
 	if len(categories) != 1 || categories[0] != xingguoWalkCategory {
 		t.Fatalf("xingguo update must walk resource ids, got %v", categories)
-	}
-}
-
-func TestNiuguoCatalogSendsTypeIDInsteadOfClass(t *testing.T) {
-	var queries []url.Values
-	d, server := duanjuFixtureDownloader(t, func(w http.ResponseWriter, r *http.Request) {
-		queries = append(queries, r.URL.Query())
-		payload := `{"status":0,"msg":"ok","data":[{"vod_id":575258,"vod_name":"牛果样本","vod_pic":"https://pic.example.cn/a.jpg","vod_remarks":"已完结","vod_douban_score":"4.5"}]}`
-		block, err := aes.NewCipher(niuguoDecryptKey(niuguoRequestURI("http://" + r.Host + r.URL.String())))
-		if err != nil {
-			t.Errorf("fixture cipher failed: %v", err)
-			return
-		}
-		padded := pkcs7Pad([]byte(payload), aes.BlockSize)
-		encrypted := make([]byte, len(padded))
-		for offset := 0; offset < len(padded); offset += aes.BlockSize {
-			block.Encrypt(encrypted[offset:offset+aes.BlockSize], padded[offset:offset+aes.BlockSize])
-		}
-		w.Header().Set("Content-Type", "text/plain")
-		io.WriteString(w, base64.StdEncoding.EncodeToString(encrypted))
-	})
-	d.providerHosts[sourceNiuguo] = server.URL
-	for _, category := range []string{"5", "1", "2", "4", "3"} {
-		if _, _, err := d.fetchNiuguoCatalogPage(context.Background(), 1, category); err != nil {
-			t.Fatalf("niuguo catalog for %q failed: %v", category, err)
-		}
-	}
-	if len(queries) != 5 {
-		t.Fatalf("expected 5 requests, got %d", len(queries))
-	}
-	for index, query := range queries {
-		want := []string{"5", "1", "2", "4", "3"}[index]
-		if query.Get("type_id") != want {
-			t.Fatalf("request %d sent type_id=%q want %q", index, query.Get("type_id"), want)
-		}
-		if query.Get("class") != "" {
-			t.Fatalf("request %d must not send class, got %q", index, query.Get("class"))
-		}
-	}
-}
-
-func TestNiuguoCategoryAndBoardIDsMatchTypeIDs(t *testing.T) {
-	want := map[string]string{"5": "短剧", "1": "电影", "2": "电视剧", "4": "动漫", "3": "综艺"}
-	static := duanjuStaticCategories[sourceNiuguo]
-	if len(static) != len(want) {
-		t.Fatalf("niuguo should expose %d categories, got %d", len(want), len(static))
-	}
-	for _, entry := range static {
-		if want[entry.ID] != entry.Name {
-			t.Fatalf("niuguo category %q is named %q", entry.ID, entry.Name)
-		}
-		delete(want, entry.ID)
-	}
-	if len(want) != 0 {
-		t.Fatalf("niuguo categories are missing: %v", want)
-	}
-	typeIDs := map[string]string{"5": "短剧", "1": "电影", "2": "电视剧", "4": "动漫", "3": "综艺"}
-	seen := map[string]bool{}
-	for _, board := range rankingBoards {
-		if board.Source != sourceNiuguo {
-			continue
-		}
-		if seen[board.path] {
-			t.Fatalf("niuguo board %s reuses category %q", board.ID, board.path)
-		}
-		seen[board.path] = true
-		if _, found := typeIDs[board.path]; !found {
-			t.Fatalf("niuguo board %s uses %q which is not a type_id", board.ID, board.path)
-		}
-	}
-	if len(seen) != 5 {
-		t.Fatalf("niuguo should expose 5 distinct boards, got %d", len(seen))
 	}
 }
 

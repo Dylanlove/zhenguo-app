@@ -442,7 +442,7 @@ class _LivePlayerScreenState extends State<LivePlayerScreen> {
               ),
             if (error != null)
               ColoredBox(
-                color: Colors.black.withValues(alpha: .82),
+                color: Colors.black,
                 child: StatusPanel(
                   title: '直播暂时中断',
                   message: error,

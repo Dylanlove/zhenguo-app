@@ -1932,7 +1932,7 @@ class _PlayerScreenState extends State<PlayerScreen>
     final title =
         '${widget.detail.drama.title} · 第 ${widget.detail.episodes[_index].number} 集${_plan?.local == true ? ' · 本地' : ''}${widget.detail.episodes[_index].vip ? ' · VIP 试看' : ''}${(_plan?.routeIndex ?? 0) > 0 ? ' · 线路 ${_plan!.routeIndex + 1}' : ''}';
     final hideOverlayForPictureInPicture = _pictureInPictureVisible;
-    final Widget controls = hideOverlayForPictureInPicture
+    final Widget controls = hideOverlayForPictureInPicture || _error != null
         ? const SizedBox.shrink()
         : _television
         ? TelevisionControls(
@@ -1999,10 +1999,12 @@ class _PlayerScreenState extends State<PlayerScreen>
       children: [
         if (_loading && !hideOverlayForPictureInPicture)
           const ColoredBox(color: Colors.black),
-        if (!_loading && !hideOverlayForPictureInPicture)
+        if (!_loading && _error == null && !hideOverlayForPictureInPicture)
           DanmakuOverlay(controller: _danmaku, aspectRatio: _aspectRatio),
         controls,
-        if ((_loading || _buffering) && !hideOverlayForPictureInPicture)
+        if ((_loading || _buffering) &&
+            _error == null &&
+            !hideOverlayForPictureInPicture)
           PlayerStatusMessage(message: _loading ? _loadingMessage : '正在缓冲'),
       ],
     );
@@ -2049,7 +2051,7 @@ class _PlayerScreenState extends State<PlayerScreen>
                 ),
               if (_error != null && !hideOverlayForPictureInPicture)
                 ColoredBox(
-                  color: Colors.black.withValues(alpha: .9),
+                  color: Colors.black,
                   child: StatusPanel(
                     title: '暂时无法播放',
                     message: _error!,

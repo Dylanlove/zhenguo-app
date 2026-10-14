@@ -7,6 +7,7 @@ import 'package:duanju_app/live_store.dart';
 import 'package:duanju_app/local_store.dart';
 import 'package:duanju_app/player_route.dart';
 import 'package:duanju_app/player_screen.dart';
+import 'package:duanju_app/player_controls.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -197,6 +198,9 @@ void main() {
     (tester) async {
       final (player, _) = await openFailedPlayer(tester);
       await tester.pump(const Duration(seconds: 3));
+      expect(find.byTooltip('返回'), findsOneWidget);
+      expect(find.byTooltip('旋转与全屏'), findsOneWidget);
+      expect(find.byType(PlayerControls), findsNothing);
       expect(find.byTooltip('返回').hitTestable(), findsOneWidget);
       await tester.tap(find.byTooltip('返回').hitTestable());
       await tester.pumpAndSettle();
@@ -216,6 +220,7 @@ void main() {
           await tester.tap(find.byTooltip('旋转与全屏').hitTestable());
           await tester.pumpAndSettle();
           expect(find.byTooltip('退出全屏').hitTestable(), findsOneWidget);
+          expect(find.byTooltip('退出全屏'), findsOneWidget);
         }
         await tester.timedDragFrom(
           const Offset(1, 180),
@@ -230,6 +235,28 @@ void main() {
       },
     );
   }
+
+  iosTest('retry replaces error navigation with one normal control layer', (
+    tester,
+  ) async {
+    final (player, repository) = await openFailedPlayer(tester);
+    expect(find.byTooltip('返回'), findsOneWidget);
+    expect(find.byType(PlayerControls), findsNothing);
+    repository.broken = false;
+    await tester.tap(find.text('重试播放'));
+    for (var index = 0; index < 12; index++) {
+      await tester.pump(const Duration(milliseconds: 10));
+    }
+    expect(find.text('暂时无法播放'), findsNothing);
+    expect(find.byType(PlayerControls), findsOneWidget);
+    expect(find.byTooltip('返回'), findsOneWidget);
+    expect(find.byTooltip('旋转与全屏'), findsOneWidget);
+    await tester.tap(find.byTooltip('返回').hitTestable());
+    await tester.pumpAndSettle();
+    expect(find.text('打开播放器'), findsOneWidget);
+    expect(player.disposed, isTrue);
+    expect(tester.takeException(), isNull);
+  });
 
   iosTest('live playback errors also keep a working return button', (
     tester,
