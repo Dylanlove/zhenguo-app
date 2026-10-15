@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 
 import 'app_layout.dart';
+import 'danmaku_settings.dart';
 import 'glass_panel.dart';
 import 'local_store.dart';
 import 'playback_preferences.dart';
@@ -147,16 +148,22 @@ class PlaybackSettingsScreen extends StatelessWidget {
                           ),
                         ),
                 ),
-                SwitchListTile(
-                  value: preferences.danmaku,
-                  title: const Text('显示弹幕'),
-                  subtitle: const Text('打开视频时默认开启弹幕，播放中可随时开关。'),
-                  onChanged: !enabled
+                ListTile(
+                  leading: const Icon(Icons.subtitles_outlined),
+                  title: const Text('弹幕设置'),
+                  subtitle: Text(
+                    preferences.danmakuSettings.source == null
+                        ? '添加 API、匹配作品与调整显示'
+                        : '数据源 · ${preferences.danmakuSettings.source!.name}',
+                  ),
+                  trailing: const Icon(Icons.chevron_right_rounded),
+                  onTap: !enabled
                       ? null
-                      : (value) => saveUserChange(
-                          context,
-                          () => store.setPlaybackPreferences(
-                            preferences.copyWith(danmaku: value),
+                      : () => showDialog<void>(
+                          context: context,
+                          builder: (_) => DanmakuSettingsPanel(
+                            store: store,
+                            television: AppLayout.isTelevision(context),
                           ),
                         ),
                 ),

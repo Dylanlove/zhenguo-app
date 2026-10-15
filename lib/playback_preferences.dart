@@ -1,4 +1,5 @@
 import 'video_enhancement_preferences.dart';
+import 'danmaku_preferences.dart';
 
 const playbackSpeeds = [.5, .75, 1.0, 1.25, 1.5, 2.0, 3.0];
 const holdSpeeds = [1.5, 2.0, 2.5, 3.0];
@@ -14,6 +15,7 @@ class PlaybackPreferences {
     this.quality = 0,
     this.autoAdvance = true,
     this.danmaku = true,
+    this.danmakuSettings = const DanmakuPreferences(),
     this.preload = true,
     this.holdSpeed = 2,
     this.swipeSeekSeconds = 60,
@@ -25,6 +27,7 @@ class PlaybackPreferences {
   final int quality;
   final bool autoAdvance;
   final bool danmaku;
+  final DanmakuPreferences danmakuSettings;
   final bool preload;
   final double holdSpeed;
   final int swipeSeekSeconds;
@@ -36,6 +39,7 @@ class PlaybackPreferences {
     int? quality,
     bool? autoAdvance,
     bool? danmaku,
+    DanmakuPreferences? danmakuSettings,
     bool? preload,
     double? holdSpeed,
     int? swipeSeekSeconds,
@@ -46,6 +50,7 @@ class PlaybackPreferences {
     quality: quality ?? this.quality,
     autoAdvance: autoAdvance ?? this.autoAdvance,
     danmaku: danmaku ?? this.danmaku,
+    danmakuSettings: danmakuSettings ?? this.danmakuSettings,
     preload: preload ?? this.preload,
     holdSpeed: holdSpeed ?? this.holdSpeed,
     swipeSeekSeconds: swipeSeekSeconds ?? this.swipeSeekSeconds,
@@ -58,6 +63,7 @@ class PlaybackPreferences {
     'quality': quality,
     'autoAdvance': autoAdvance,
     'danmaku': danmaku,
+    'danmakuSettings': danmakuSettings.toJson(),
     'preload': preload,
     'holdSpeed': holdSpeed,
     'swipeSeekSeconds': swipeSeekSeconds,
@@ -86,6 +92,7 @@ class PlaybackPreferences {
       quality: quality,
       autoAdvance: autoAdvance,
       danmaku: danmaku,
+      danmakuSettings: DanmakuPreferences.fromJson(value['danmakuSettings']),
       preload: preload,
       holdSpeed: holdSpeed,
       swipeSeekSeconds: swipeSeekSeconds,

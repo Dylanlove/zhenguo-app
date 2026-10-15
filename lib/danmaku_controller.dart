@@ -2,46 +2,54 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 
-import 'core_bridge.dart';
+import 'danmaku_api.dart';
 import 'danmaku_models.dart';
+import 'danmaku_preferences.dart';
 import 'models.dart';
 
 class DanmakuController extends ChangeNotifier {
-  DanmakuController(this.repository, {DateTime Function()? now})
-    : _now = now ?? DateTime.now;
+  DanmakuController({
+    DanmakuService? service,
+    DanmakuPreferences preferences = const DanmakuPreferences(),
+    DateTime Function()? now,
+    this.onRememberMatch,
+  }) : service = service ?? DanmakuApiClient(),
+       _preferences = preferences {
+    final clock = Stopwatch()..start();
+    _now =
+        now ??
+        () => DateTime.fromMillisecondsSinceEpoch(clock.elapsedMilliseconds);
+  }
 
-  final AppRepository repository;
-  final DateTime Function() _now;
-  final _pages = <int, DanmakuPage>{};
-  final _failures = <int, DateTime>{};
+  final DanmakuService service;
+  final Future<void> Function(String key, DanmakuMatch match)? onRememberMatch;
+  late final DateTime Function() _now;
+  DanmakuPreferences _preferences;
+  DanmakuPreferences get preferences => _preferences;
   PlaybackPlan? _plan;
+  DanmakuSubject? _subject;
+  DanmakuSubject? get subject => _subject;
+  DanmakuMatch? _match;
+  DanmakuMatch? get currentMatch => _match;
+  DanmakuCancellation? _pending;
   int _generation = 0;
-  int? _pendingStart;
-  bool _closed = false;
-  bool _enabled = true;
-  bool _available = false;
-  bool _foreground = true;
-  bool _playing = false;
-  bool _buffering = false;
-  bool _seeking = false;
-  int positionMs = 0;
-  int durationMs = 0;
+  bool _closed = false, _enabled = true, _available = false, _foreground = true;
+  bool _playing = false,
+      _buffering = false,
+      _seeking = false,
+      _loaded = false,
+      _attempted = false;
+  String? _error;
+  String? get error => _error;
+  int positionMs = 0, durationMs = 0;
   double rate = 1;
-  int motionRevision = 0;
-  int dataRevision = 0;
+  int motionRevision = 0, dataRevision = 0;
   List<DanmakuItem> items = const [];
   DateTime? _anchorTime;
-  int _anchorPosition = 0;
-  double _anchorRate = 1;
-  bool _anchorMoving = false;
-  int _publishedPosition = 0;
-  bool _publishedVisible = false;
+  double _anchorPosition = 0;
 
-  bool get supported =>
-      _plan != null &&
-      !_plan!.local &&
-      _plan!.session.isNotEmpty &&
-      _plan!.danmakuId.isNotEmpty;
+  bool get enabled => _enabled;
+  bool get supported => _plan != null && !_plan!.local && _subject != null;
   bool get visible =>
       !_closed &&
       supported &&
@@ -49,47 +57,84 @@ class DanmakuController extends ChangeNotifier {
       _available &&
       _foreground &&
       !_seeking &&
-      durationMs > 0 &&
-      positionMs < durationMs;
-  bool get moving => visible && _playing && !_buffering;
-  bool get loading => _pendingStart != null;
-  bool get canRetry => visible && _failures.isNotEmpty;
-  String get status {
-    if (!_enabled) return '弹幕已关闭';
-    if (_plan?.local == true) return '本地播放不加载弹幕';
-    if (_plan != null && !supported) return '本集暂不支持弹幕';
-    if (canRetry) return '弹幕暂不可用，可重试';
-    if (loading && _pages.isEmpty) return '正在加载弹幕';
-    if (_pages.isNotEmpty) {
-      return items.isEmpty ? '这段暂无弹幕' : '已载入 ${items.length} 条弹幕';
-    }
-    return '等待播放';
+      _loaded &&
+      (durationMs == 0 || positionMs < durationMs);
+  bool get moving => visible && items.isNotEmpty && _playing && !_buffering;
+  bool get loading => _pending != null;
+  bool get canRetry =>
+      supported &&
+      _enabled &&
+      _preferences.source != null &&
+      !loading &&
+      (_error != null || (_attempted && _match == null));
+  double get timelinePositionMs {
+    if (!moving || _anchorTime == null) return _anchorPosition;
+    final elapsed = _now().difference(_anchorTime!).inMicroseconds / 1000;
+    final projected = _anchorPosition + elapsed.clamp(0, 2000) * rate;
+    return durationMs > 0
+        ? projected.clamp(0, durationMs.toDouble())
+        : projected;
   }
 
-  void setPlan(PlaybackPlan? plan) {
-    if (_closed || identical(_plan, plan)) return;
+  String get status {
+    if (!_enabled) return '弹幕已关闭';
+    if (_plan?.local == true) return '本地播放不加载在线弹幕';
+    if (_plan != null && !supported) return '缺少有效的剧名或分集信息';
+    if (_preferences.source == null) return '尚未配置弹幕 API，请先添加数据源';
+    if (_error != null) return _error!;
+    if (loading) return _match == null ? '正在匹配作品与分集…' : '正在加载弹幕…';
+    if (_loaded) return items.isEmpty ? '本集暂无弹幕' : '已载入 ${items.length} 条弹幕';
+    if (_attempted && _match == null) return '未找到唯一匹配，请手动搜索作品和分集';
+    if (!_preferences.autoMatch && _match == null) return '自动匹配已关闭，可手动搜索';
+    return '等待视频就绪';
+  }
+
+  void setPlan(PlaybackPlan? plan, {DanmakuSubject? subject}) {
+    if (_closed) return;
     _cancel();
     _plan = plan;
-    _pages.clear();
-    _failures.clear();
-    _rebuildItems();
+    _subject = subject;
+    _clearData();
     _seeking = false;
     _available = false;
     positionMs = durationMs = 0;
+    _anchorPosition = 0;
     _resetMotion();
-    _publish();
+    notifyListeners();
+  }
+
+  void configure(DanmakuPreferences value) {
+    if (_closed || identical(_preferences, value)) return;
+    final changedSource =
+        _preferences.source?.id != value.source?.id ||
+        _preferences.source?.baseUrl != value.source?.baseUrl;
+    final autoEnabled = !_preferences.autoMatch && value.autoMatch;
+    final wasAuto = _preferences.autoMatch;
+    _preferences = value;
+    if (changedSource ||
+        (wasAuto && !value.autoMatch && loading && _match == null)) {
+      _cancel();
+      _clearData();
+    }
+    if (autoEnabled) {
+      _attempted = false;
+      _error = null;
+    }
+    dataRevision++;
+    notifyListeners();
+    _ensureLoad();
   }
 
   void setEnabled(bool enabled) {
     if (_closed || _enabled == enabled) return;
+    _anchorPosition = timelinePositionMs;
     _enabled = enabled;
     _cancel();
-    _failures.clear();
-    _pages.clear();
-    _rebuildItems();
+    _attempted = _loaded;
+    _error = null;
     _resetMotion();
-    _publish();
-    _ensureWindow();
+    notifyListeners();
+    _ensureLoad();
   }
 
   void update({
@@ -103,215 +148,167 @@ class DanmakuController extends ChangeNotifier {
     bool discontinuity = false,
   }) {
     if (_closed) return;
-    final wasVisible = visible, wasMoving = moving;
-    final previousRate = rate;
-    final nextPosition = position.inMilliseconds.clamp(0, danmakuMaxDurationMs);
-    final nextDuration = duration.inMilliseconds;
-    final elapsed = _anchorTime == null
-        ? 0
-        : _now()
-              .difference(_anchorTime!)
-              .inMilliseconds
-              .clamp(0, danmakuMaxDurationMs);
-    final expected =
-        _anchorPosition + (_anchorMoving ? elapsed * _anchorRate : 0);
-    final drift = !_seeking && (nextPosition - expected).abs() > 600;
-    final durationChanged = nextDuration != durationMs && durationMs > 0;
+    final previousMoving = moving, previousVisible = visible;
+    final predicted = timelinePositionMs;
+    final next = position.inMilliseconds.clamp(0, danmakuMaxDurationMs);
+    final nextRate = speed.isFinite && speed > 0 ? speed : 1.0;
     final jumped =
-        !_seeking &&
-        (discontinuity ||
-            nextPosition < positionMs ||
-            nextPosition - positionMs > 2000);
-    if (durationChanged) {
-      _cancel();
-      _pages.clear();
-      _failures.clear();
-      _rebuildItems();
-    } else if (jumped) {
-      _cancel();
-    }
-    if (!_seeking) positionMs = nextPosition;
-    durationMs = nextDuration > 0 && nextDuration <= danmakuMaxDurationMs
-        ? nextDuration
-        : 0;
-    rate = speed.isFinite && speed > 0 ? speed : 1;
+        discontinuity || next < positionMs - 250 || next - positionMs > 2000;
+    final drift = (next - predicted).abs() > 180;
+    final speedChanged = nextRate != rate;
+    if (!_seeking) positionMs = next;
+    durationMs = duration.inMilliseconds.clamp(0, danmakuMaxDurationMs);
+    rate = nextRate;
     _playing = playing;
     _buffering = buffering;
     _foreground = foreground;
     _available = available;
-    if (wasVisible && !visible) _cancel();
-    final resync =
+    if ((!available || !foreground) && loading) {
+      _cancel();
+      _attempted = _loaded;
+    }
+    if (jumped ||
         drift ||
-        jumped ||
-        durationChanged ||
-        wasVisible != visible ||
-        wasMoving != moving ||
-        previousRate != rate;
-    if (resync) _resetMotion();
-    final entered = visible != _publishedVisible;
-    final crossed = visible && _crossesBoundary(_publishedPosition, positionMs);
-    if (resync || entered || crossed) {
-      _publishedPosition = positionMs;
-      _publishedVisible = visible;
-      _publish();
+        speedChanged ||
+        previousMoving != moving ||
+        previousVisible != visible) {
+      _anchorPosition = _seeking ? predicted : positionMs.toDouble();
+      _resetMotion();
+      notifyListeners();
+    } else if (_anchorTime == null ||
+        _now().difference(_anchorTime!).inMilliseconds > 800) {
+      _anchorPosition = predicted;
+      _anchorTime = _now();
     }
-    _ensureWindow();
-  }
-
-  void _publish() {
-    _publishedPosition = positionMs;
-    _publishedVisible = visible;
-    notifyListeners();
-  }
-
-  bool _crossesBoundary(int from, int to) {
-    if (to <= from) return false;
-    for (final item in items) {
-      if (item.timeMs > from && item.timeMs <= to) return true;
-      final end = item.timeMs + danmakuLifetimeMs;
-      if (end > from && end <= to) return true;
-    }
-    return false;
+    _ensureLoad();
   }
 
   void beginSeek() {
     if (_closed) return;
-    _cancel();
+    _anchorPosition = timelinePositionMs;
     _seeking = true;
     _resetMotion();
-    _publish();
+    notifyListeners();
   }
 
   void endSeek(Duration position) {
     if (_closed) return;
     _seeking = false;
     positionMs = position.inMilliseconds.clamp(0, danmakuMaxDurationMs);
+    _anchorPosition = positionMs.toDouble();
     _resetMotion();
-    _publish();
-    _ensureWindow();
+    notifyListeners();
+    _ensureLoad();
   }
 
-  void retry() {
-    if (_closed || !visible) return;
-    _failures.clear();
-    _ensureWindow();
-    _publish();
+  void retry({bool rematch = false}) {
+    if (_closed || !_enabled) return;
+    _cancel();
+    _attempted = false;
+    _loaded = false;
+    _error = null;
+    if (rematch) _match = null;
+    _ensureLoad(ignoreSaved: rematch);
+    notifyListeners();
+  }
+
+  Future<void> selectMatch(DanmakuMatch match) async {
+    if (_closed || !supported || match.sourceId != _preferences.source?.id)
+      return;
+    final subject = _subject!;
+    _cancel();
+    _clearData();
+    _match = match;
+    _preferences = _preferences.remember(subject.key, match);
+    notifyListeners();
+    _ensureLoad();
+    await onRememberMatch?.call(subject.key, match);
   }
 
   void _resetMotion() {
     motionRevision++;
     _anchorTime = _now();
-    _anchorPosition = positionMs;
-    _anchorRate = rate;
-    _anchorMoving = moving;
   }
 
   void _cancel() {
     _generation++;
-    if (_pendingStart != null) {
-      _pendingStart = null;
-      unawaited(repository.cancelDanmaku().catchError((Object _) {}));
-    }
+    _pending?.cancel();
+    _pending = null;
   }
 
-  DanmakuPage? _covering(int position) {
-    DanmakuPage? found;
-    for (final page in _pages.values) {
-      if (page.startMs <= position &&
-          position < page.nextMs &&
-          (found == null || page.startMs > found.startMs)) {
-        found = page;
-      }
-    }
-    return found;
+  void _clearData() {
+    _match = null;
+    _error = null;
+    _loaded = _attempted = false;
+    items = const [];
+    dataRevision++;
   }
 
-  void _ensureWindow() {
-    if (!visible || _buffering || _pendingStart != null) return;
-    final page = _covering(positionMs);
-    var start = positionMs ~/ danmakuWindowMs * danmakuWindowMs;
-    if (page == null && _pages.containsKey(start)) start = positionMs;
-    if (page != null) {
-      if (!moving ||
-          positionMs < page.nextMs - danmakuLifetimeMs ||
-          page.nextMs >= durationMs ||
-          _covering(page.nextMs) != null) {
-        return;
-      }
-      start = page.nextMs;
-    }
-    final retryAt = _failures[start];
-    if (retryAt != null && _now().isBefore(retryAt)) return;
-    unawaited(_load(start));
+  void _ensureLoad({bool ignoreSaved = false}) {
+    if (_closed ||
+        !_enabled ||
+        !supported ||
+        !_available ||
+        !_foreground ||
+        _buffering ||
+        _seeking ||
+        loading ||
+        _loaded ||
+        _attempted ||
+        _preferences.source == null)
+      return;
+    final saved = ignoreSaved
+        ? null
+        : _preferences.savedMatch(_subject!.key, _preferences.source!.id);
+    if (_match == null && saved?.sourceId == _preferences.source!.id)
+      _match = saved;
+    if (_match == null && !_preferences.autoMatch) return;
+    unawaited(_load(rematch: ignoreSaved));
   }
 
-  Future<void> _load(int start) async {
+  Future<void> _load({bool rematch = false}) async {
     final ticket = _generation;
-    final plan = _plan!;
-    final duration = durationMs;
-    _pendingStart = start;
-    _publish();
+    final source = _preferences.source!, subject = _subject!;
+    final cancel = DanmakuCancellation();
+    _pending = cancel;
+    _attempted = true;
+    notifyListeners();
     try {
-      final page = await repository.danmaku(
-        plan,
-        startMs: start,
-        durationMs: duration,
-      );
+      final match =
+          _match ??
+          await service.match(source, subject, cancel, force: rematch);
       if (_closed || ticket != _generation) return;
-      if (page.episodeId != plan.danmakuId ||
-          page.startMs != start ||
-          page.nextMs <= start ||
-          page.nextMs > duration ||
-          page.items.length > 90 ||
-          page.items.any(
-            (item) => item.timeMs < start || item.timeMs >= page.nextMs,
-          )) {
-        throw const FormatException('弹幕时间范围无效');
-      }
-      _pages[start] = page;
-      _failures.remove(start);
-      final nearest = _pages.keys.toList()
-        ..sort(
-          (a, b) => (a - positionMs).abs().compareTo((b - positionMs).abs()),
-        );
-      for (final key in nearest.skip(6)) {
-        _pages.remove(key);
-      }
-      _rebuildItems();
-    } catch (_) {
+      cancel.check();
+      _match = match;
+      if (match == null) return;
+      notifyListeners();
+      final loaded = await service.comments(source, match, cancel);
       if (_closed || ticket != _generation) return;
-      _failures[start] = _now().add(const Duration(seconds: 15));
-      while (_failures.length > 8) {
-        _failures.remove(_failures.keys.first);
-      }
+      cancel.check();
+      items = List.unmodifiable(loaded);
+      _loaded = true;
+      dataRevision++;
+      _anchorPosition = positionMs.toDouble();
+      _resetMotion();
+    } on DanmakuCancelled {
+      return;
+    } catch (error) {
+      if (_closed || ticket != _generation) return;
+      _error = error is DanmakuApiException ? error.message : '弹幕加载失败，可重试或手动搜索';
     } finally {
       if (!_closed && ticket == _generation) {
-        _pendingStart = null;
-        _publish();
-        _ensureWindow();
+        _pending = null;
+        notifyListeners();
       }
     }
-  }
-
-  void _rebuildItems() {
-    final unique = <String, DanmakuItem>{};
-    final pages = _pages.values.toList()
-      ..sort((a, b) => a.startMs.compareTo(b.startMs));
-    for (final page in pages) {
-      for (final item in page.items) {
-        unique.putIfAbsent(item.id, () => item);
-      }
-    }
-    final sorted = unique.values.toList()
-      ..sort((a, b) => a.timeMs.compareTo(b.timeMs));
-    items = List.unmodifiable(sorted);
-    dataRevision++;
   }
 
   @override
   void dispose() {
     _closed = true;
     _cancel();
+    service.dispose();
+    items = const [];
     super.dispose();
   }
 }

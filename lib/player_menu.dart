@@ -27,7 +27,7 @@ class PlayerMenu extends StatefulWidget {
     required this.onFavorite,
     this.showDanmaku = false,
     this.danmakuStatus = '',
-    this.onRetryDanmaku,
+    this.onDanmakuSettings,
     this.preloadStatus = '',
     this.enhancement,
     this.onCompareEnhancement,
@@ -44,7 +44,7 @@ class PlayerMenu extends StatefulWidget {
   final bool mobile;
   final bool showDanmaku;
   final String danmakuStatus;
-  final VoidCallback? onRetryDanmaku;
+  final VoidCallback? onDanmakuSettings;
   final String preloadStatus;
   final VideoEnhancementController? enhancement;
   final VoidCallback? onCompareEnhancement;
@@ -239,27 +239,15 @@ class _PlayerMenuState extends State<PlayerMenu> {
             onCompare: widget.onCompareEnhancement ?? () {},
           ),
         if (all && widget.showDanmaku) ...[
-          SwitchListTile.adaptive(
-            key: const ValueKey('player-danmaku-enabled'),
+          ListTile(
+            key: const ValueKey('player-menu-danmaku-settings'),
             contentPadding: EdgeInsets.zero,
-            title: const Text('弹幕'),
+            leading: const Icon(Icons.subtitles_outlined),
+            title: const Text('弹幕设置'),
             subtitle: Text(widget.danmakuStatus),
-            value: preferences.danmaku,
-            onChanged: _busy
-                ? null
-                : (value) => _run(
-                    () => widget.onPreferences(
-                      preferences.copyWith(danmaku: value),
-                    ),
-                  ),
+            trailing: const Icon(Icons.chevron_right_rounded),
+            onTap: _busy ? null : widget.onDanmakuSettings,
           ),
-          if (widget.onRetryDanmaku != null)
-            TextButton.icon(
-              key: const ValueKey('player-danmaku-retry'),
-              onPressed: _busy ? null : widget.onRetryDanmaku,
-              icon: const Icon(Icons.refresh_rounded),
-              label: const Text('重试弹幕'),
-            ),
           const SizedBox(height: 8),
         ],
         if (all) ...[

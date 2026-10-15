@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -17,7 +18,10 @@ import 'app_theme.dart';
 import 'core_bridge.dart';
 import 'cross_source_search.dart';
 import 'danmaku_controller.dart';
+import 'danmaku_api.dart';
+import 'danmaku_models.dart';
 import 'danmaku_overlay.dart';
+import 'danmaku_settings.dart';
 import 'download_picker.dart';
 import 'downloads_screen.dart';
 import 'follow_state.dart';
@@ -59,6 +63,7 @@ class PlayerScreen extends StatefulWidget {
     this.mediaId,
     this.playerFactory,
     this.videoBuilder,
+    this.danmakuServiceFactory,
     this.handoff,
     this.searchKeyword = '',
   });
@@ -76,6 +81,8 @@ class PlayerScreen extends StatefulWidget {
   final Player Function()? playerFactory;
   @visibleForTesting
   final Widget Function(Widget controls)? videoBuilder;
+  @visibleForTesting
+  final DanmakuService Function()? danmakuServiceFactory;
   @override
   State<PlayerScreen> createState() => _PlayerScreenState();
 }
@@ -93,6 +100,7 @@ class _PlayerScreenState extends State<PlayerScreen>
   late final PlaybackPreloader _preloader;
   bool _preloadEnabled = true;
   late final DanmakuController _danmaku;
+  String _danmakuPreferencesJson = '';
   int _seekSequence = 0;
   bool _danmakuEnabled = true;
   late final PlayerInteractions _interactions;
@@ -178,14 +186,22 @@ class _PlayerScreenState extends State<PlayerScreen>
           defaultTargetPlatform == TargetPlatform.iOS);
   VideoEnhancementController? get _enhancementForUi =>
       _enhancement.supported ? _enhancement : null;
-  PlaybackPreferences get _preferences => PlaybackPreferences(
-    speed: _speed,
-    quality: _requestedQuality,
-    autoAdvance: _autoAdvance,
-    danmaku: _danmakuEnabled,
-    preload: _preloadEnabled,
-    enhancement: _enhancement.preferences,
-  );
+  bool get _supportsDanmaku =>
+      _plan?.local != true &&
+      DanmakuSubject.fromEpisode(
+            widget.detail.drama,
+            widget.detail.episodes[_index],
+          ) !=
+          null;
+  PlaybackPreferences get _preferences =>
+      widget.store.playbackPreferences.copyWith(
+        speed: _speed,
+        quality: _requestedQuality,
+        autoAdvance: _autoAdvance,
+        danmaku: _danmakuEnabled,
+        preload: _preloadEnabled,
+        enhancement: _enhancement.preferences,
+      );
   String get _qualityLabel => _plan?.local == true
       ? '本地原画'
       : _requestedQuality == 0
@@ -270,8 +286,23 @@ class _PlayerScreenState extends State<PlayerScreen>
     _preloadEnabled = preferences.preload;
     _loader = PlaybackLoader(widget.repository);
     _preloader = PlaybackPreloader(widget.repository);
-    _danmaku = DanmakuController(widget.repository)
-      ..setEnabled(_danmakuEnabled);
+    _danmakuPreferencesJson = jsonEncode(preferences.danmakuSettings.toJson());
+    _danmaku = DanmakuController(
+      service: widget.danmakuServiceFactory?.call(),
+      preferences: preferences.danmakuSettings,
+      onRememberMatch: (key, match) async {
+        if (_closed ||
+            widget.store.profileEpoch != _profileEpoch ||
+            widget.store.locked)
+          return;
+        final current = widget.store.playbackPreferences;
+        await widget.store.setPlaybackPreferences(
+          current.copyWith(
+            danmakuSettings: current.danmakuSettings.remember(key, match),
+          ),
+        );
+      },
+    )..setEnabled(_danmakuEnabled);
     widget.store.addListener(_accessChanged);
     _player =
         widget.playerFactory?.call() ??
@@ -508,8 +539,22 @@ class _PlayerScreenState extends State<PlayerScreen>
     if (!_closed &&
         (widget.store.profileEpoch != _profileEpoch ||
             widget.store.locked ||
-            !widget.store.allowsSource('hongguo'))) {
+            !widget.store.allowsSource(widget.detail.drama.source))) {
       _danmaku.setPlan(null);
+    }
+    if (!_closed &&
+        widget.store.profileEpoch == _profileEpoch &&
+        !widget.store.locked) {
+      final current = widget.store.playbackPreferences;
+      final signature = jsonEncode(current.danmakuSettings.toJson());
+      if (signature != _danmakuPreferencesJson) {
+        _danmakuPreferencesJson = signature;
+        _danmaku.configure(current.danmakuSettings);
+      }
+      if (_danmakuEnabled != current.danmaku) {
+        _danmaku.setEnabled(current.danmaku);
+        if (mounted) setState(() => _danmakuEnabled = current.danmaku);
+      }
     }
     final autoPictureInPicture =
         widget.store.playbackPreferences.autoPictureInPicture;
@@ -881,7 +926,7 @@ class _PlayerScreenState extends State<PlayerScreen>
           _openedIndex == _index &&
           widget.store.profileEpoch == _profileEpoch &&
           !widget.store.locked &&
-          widget.store.allowsSource('hongguo'),
+          widget.store.allowsSource(widget.detail.drama.source),
       discontinuity: discontinuity,
     );
   }
@@ -1334,7 +1379,13 @@ class _PlayerScreenState extends State<PlayerScreen>
           setState(() {
             _loading = false;
           });
-          _danmaku.setPlan(plan);
+          _danmaku.setPlan(
+            plan,
+            subject: DanmakuSubject.fromEpisode(
+              widget.detail.drama,
+              widget.detail.episodes[index],
+            ),
+          );
           _syncWatchSession();
           _syncDanmaku();
           _acknowledgeHandoff();
@@ -1487,7 +1538,7 @@ class _PlayerScreenState extends State<PlayerScreen>
   }
 
   Future<void> _toggleDanmaku() async {
-    if (widget.detail.drama.source != 'hongguo') return;
+    if (!_supportsDanmaku) return;
     try {
       await _setPreferences(_preferences.copyWith(danmaku: !_danmakuEnabled));
     } catch (_) {
@@ -1495,12 +1546,27 @@ class _PlayerScreenState extends State<PlayerScreen>
     }
   }
 
-  Future<void> _retryDanmakuFromControls() async {
+  Future<void> _showDanmakuSettings() async {
+    if (_panelOpen || _closed) return;
+    _interactions.cancel();
+    setState(() => _panelOpen = true);
     try {
-      _danmaku.retry();
-      _menuRevision.value++;
-    } catch (_) {
-      _notice('弹幕重试失败，请稍后再试');
+      await showDialog<void>(
+        context: context,
+        builder: (_) => Theme(
+          data: _television ? televisionTheme(AppTheme.dark) : AppTheme.dark,
+          child: DanmakuSettingsPanel(
+            store: widget.store,
+            controller: _danmaku,
+            television: _television,
+          ),
+        ),
+      );
+    } finally {
+      if (mounted && !_closed) {
+        setState(() => _panelOpen = false);
+        _playerFocus.requestFocus();
+      }
     }
   }
 
@@ -1539,6 +1605,7 @@ class _PlayerScreenState extends State<PlayerScreen>
     _interactions.cancel();
     setState(() => _panelOpen = true);
     final menuTheme = _showFullscreen ? AppTheme.dark : Theme.of(context);
+    var openDanmaku = false;
     try {
       final index = await showDialog<int>(
         context: context,
@@ -1563,9 +1630,12 @@ class _PlayerScreenState extends State<PlayerScreen>
               mobile: _mobile,
               onEpisode: (index) => Navigator.pop(menuContext, index),
               onPreferences: _setPreferences,
-              showDanmaku: widget.detail.drama.source == 'hongguo',
+              showDanmaku: _supportsDanmaku,
               danmakuStatus: _danmaku.status,
-              onRetryDanmaku: _danmaku.canRetry ? _danmaku.retry : null,
+              onDanmakuSettings: () {
+                openDanmaku = true;
+                Navigator.pop(menuContext);
+              },
               preloadStatus: _preloader.status,
               enhancement: _enhancementForUi,
               onCompareEnhancement: () {
@@ -1587,6 +1657,7 @@ class _PlayerScreenState extends State<PlayerScreen>
         _playerFocus.requestFocus();
       }
     }
+    if (openDanmaku && mounted && !_closed) await _showDanmakuSettings();
   }
 
   Future<void> _seekTo(Duration target) async {
@@ -1648,6 +1719,7 @@ class _PlayerScreenState extends State<PlayerScreen>
     if (_panelOpen || _closed) return;
     setState(() => _panelOpen = true);
     TelevisionPlaybackSetting? selection;
+    var openDanmaku = false;
     try {
       selection = await showDialog<TelevisionPlaybackSetting>(
         context: context,
@@ -1662,10 +1734,12 @@ class _PlayerScreenState extends State<PlayerScreen>
               favorite: widget.store.isFavorite(widget.detail.drama.id),
               onFavorite: _toggleFavorite,
               autoAdvance: _autoAdvance,
-              danmaku: _danmakuEnabled,
-              showDanmaku: widget.detail.drama.source == 'hongguo',
+              showDanmaku: _supportsDanmaku,
               danmakuStatus: _danmaku.status,
-              onRetryDanmaku: _danmaku.canRetry ? _danmaku.retry : null,
+              onDanmakuSettings: () {
+                openDanmaku = true;
+                Navigator.pop(menuContext);
+              },
               preload: _preloadEnabled,
               preloadStatus: _preloader.status,
               enhancement: _enhancementForUi,
@@ -1680,6 +1754,10 @@ class _PlayerScreenState extends State<PlayerScreen>
     } finally {
       if (mounted && !_closed) setState(() => _panelOpen = false);
     }
+    if (openDanmaku && mounted && !_closed) {
+      await _showDanmakuSettings();
+      return;
+    }
     if (selection == null || !mounted || _closed) return;
     try {
       await _setPreferences(
@@ -1687,7 +1765,6 @@ class _PlayerScreenState extends State<PlayerScreen>
           speed: selection.speed,
           quality: selection.quality,
           autoAdvance: true,
-          danmaku: selection.danmaku,
           preload: true,
           enhancement: selection.enhancement,
         ),
@@ -1810,7 +1887,6 @@ class _PlayerScreenState extends State<PlayerScreen>
 
   Widget _buildPlayer(BuildContext context) {
     final theme = Theme.of(context);
-    final title = widget.detail.drama.title;
     final fullscreen = _showFullscreen;
     final pictureInPicture = _pictureInPictureVisible;
     return PopScope(
@@ -1844,22 +1920,6 @@ class _PlayerScreenState extends State<PlayerScreen>
             backgroundColor: fullscreen || pictureInPicture
                 ? Colors.black
                 : theme.scaffoldBackgroundColor,
-            appBar: pictureInPicture || fullscreen || _mobile
-                ? null
-                : AppBar(
-                    title: Text(
-                      title,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    actions: [
-                      IconButton(
-                        tooltip: '旋转与全屏',
-                        onPressed: _rotate,
-                        icon: const PlayerRotationIcon(),
-                      ),
-                    ],
-                  ),
             body: pictureInPicture
                 ? _videoPane(context)
                 : SafeArea(
@@ -1929,15 +1989,18 @@ class _PlayerScreenState extends State<PlayerScreen>
     final videoTheme = _television
         ? televisionTheme(AppTheme.dark)
         : AppTheme.dark;
-    final title =
-        '${widget.detail.drama.title} · 第 ${widget.detail.episodes[_index].number} 集${_plan?.local == true ? ' · 本地' : ''}${widget.detail.episodes[_index].vip ? ' · VIP 试看' : ''}${(_plan?.routeIndex ?? 0) > 0 ? ' · 线路 ${_plan!.routeIndex + 1}' : ''}';
+    final episodeLabel =
+        '第 ${widget.detail.episodes[_index].number} 集${_plan?.local == true ? ' · 本地' : ''}${widget.detail.episodes[_index].vip ? ' · VIP 试看' : ''}${(_plan?.routeIndex ?? 0) > 0 ? ' · 线路 ${_plan!.routeIndex + 1}' : ''}';
     final hideOverlayForPictureInPicture = _pictureInPictureVisible;
     final Widget controls = hideOverlayForPictureInPicture || _error != null
         ? const SizedBox.shrink()
         : _television
         ? TelevisionControls(
             player: _player,
-            title: title,
+            title: widget.detail.drama.title,
+            subtitle: episodeLabel,
+            episodeNumber: widget.detail.episodes[_index].number,
+            episodeCount: widget.detail.episodes.length,
             enabled: !_loading && _error == null,
             showOnPlaybackReady: _showControlsOnPlaybackReady,
             enhancement: _enhancementForUi,
@@ -1949,6 +2012,9 @@ class _PlayerScreenState extends State<PlayerScreen>
                 : null,
             onEpisodes: () => _televisionEpisodes(context),
             onSettings: () => _televisionSettings(context),
+            danmakuEnabled: _danmakuEnabled,
+            onDanmaku: _supportsDanmaku ? _toggleDanmaku : null,
+            onDanmakuSettings: _supportsDanmaku ? _showDanmakuSettings : null,
             onSleepTimer: _showSleepTimer,
             sleepTimerLabel: _sleepTimer.label,
             onBack: _back,
@@ -1961,7 +2027,10 @@ class _PlayerScreenState extends State<PlayerScreen>
             panelOpen: _panelOpen,
             fullscreen: _showFullscreen,
             showOnPlaybackReady: _showControlsOnPlaybackReady,
-            title: title,
+            title: widget.detail.drama.title,
+            subtitle: episodeLabel,
+            episodeNumber: widget.detail.episodes[_index].number,
+            episodeCount: widget.detail.episodes.length,
             onTogglePlayback: _togglePlayback,
             swipeEnabled: _mobile,
             onFullscreen: _rotate,
@@ -1971,7 +2040,7 @@ class _PlayerScreenState extends State<PlayerScreen>
             speed: _speed,
             qualityLabel: _qualityLabel,
             showBufferingMessage: false,
-            showDanmaku: widget.detail.drama.source == 'hongguo',
+            showDanmaku: _supportsDanmaku,
             danmakuEnabled: _danmakuEnabled,
             danmakuStatus: _danmaku.status,
             onEpisodes: () => _openPanel(PlayerMenuSection.episodes),
@@ -1979,12 +2048,8 @@ class _PlayerScreenState extends State<PlayerScreen>
             onQuality: () => _openPanel(PlayerMenuSection.quality),
             onSleepTimer: _showSleepTimer,
             sleepTimerLabel: _sleepTimer.label,
-            onDanmaku: widget.detail.drama.source == 'hongguo'
-                ? _toggleDanmaku
-                : null,
-            onRetryDanmaku: _danmaku.canRetry
-                ? _retryDanmakuFromControls
-                : null,
+            onDanmaku: _supportsDanmaku ? _toggleDanmaku : null,
+            onDanmakuSettings: _supportsDanmaku ? _showDanmakuSettings : null,
             onPush: widget.mediaId == null ? _pushToDevice : null,
             onPictureInPicture: _canUsePictureInPicture
                 ? _enterPictureInPicture
@@ -2000,7 +2065,11 @@ class _PlayerScreenState extends State<PlayerScreen>
         if (_loading && !hideOverlayForPictureInPicture)
           const ColoredBox(color: Colors.black),
         if (!_loading && _error == null && !hideOverlayForPictureInPicture)
-          DanmakuOverlay(controller: _danmaku, aspectRatio: _aspectRatio),
+          DanmakuOverlay(
+            controller: _danmaku,
+            aspectRatio: _aspectRatio,
+            television: _television,
+          ),
         controls,
         if ((_loading || _buffering) &&
             _error == null &&
@@ -2093,7 +2162,6 @@ class _PlayerScreenState extends State<PlayerScreen>
                 ),
               if (_error != null &&
                   !hideOverlayForPictureInPicture &&
-                  (_mobile || _showFullscreen) &&
                   !_television)
                 SafeArea(
                   bottom: false,
@@ -2109,7 +2177,7 @@ class _PlayerScreenState extends State<PlayerScreen>
                             backgroundColor: Colors.black54,
                           ),
                           icon: Icon(
-                            _showFullscreen
+                            _showFullscreen || !_mobile
                                 ? Icons.arrow_back_rounded
                                 : Icons.arrow_back_ios_new_rounded,
                           ),
