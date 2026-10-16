@@ -9,6 +9,13 @@ import 'danmaku_models.dart';
 import 'danmaku_preferences.dart';
 import 'local_store.dart';
 
+String danmakuSettingsSummary(LocalStore store) {
+  final preferences = store.playbackPreferences;
+  final status = preferences.danmaku ? '已开启' : '已关闭';
+  final source = preferences.danmakuSettings.source;
+  return source == null ? '$status · 点击配置数据源' : '$status · 数据源：${source.name}';
+}
+
 class DanmakuSettingsPanel extends StatefulWidget {
   const DanmakuSettingsPanel({
     super.key,
@@ -154,7 +161,7 @@ class _DanmakuSettingsPanelState extends State<DanmakuSettingsPanel> {
                       const SizedBox(width: 10),
                       Expanded(
                         child: Text(
-                          '弹幕',
+                          '弹幕设置',
                           style: Theme.of(context).textTheme.titleLarge,
                         ),
                       ),

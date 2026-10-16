@@ -62,6 +62,9 @@ class NetworkExit {
   /// 直接说明原因和可执行的下一步，避免用户反复点重试。
   static String describe(String raw) {
     final lower = raw.toLowerCase();
+    if (raw.contains('海报请求失败') && lower.contains('http 403')) {
+      return '$raw\n图片服务拒绝访问，可能存在防盗链或访问限制。可尝试重新获取海报。';
+    }
     final String hint;
     if (lower.contains('http 403') || raw.contains('浏览器验证')) {
       hint = '站源要求浏览器验证，当前网络出口被判定为可疑';

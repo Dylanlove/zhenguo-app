@@ -655,19 +655,7 @@ class _PlayerControlsState extends State<PlayerControls> {
       alignment: Alignment.centerRight,
       child: Padding(
         padding: EdgeInsets.only(right: widget.swipeEnabled ? 0 : 4),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            _danmakuTool(),
-            if (widget.onDanmakuSettings != null)
-              _toolButton(
-                key: const ValueKey('player-danmaku-settings'),
-                tooltip: '弹幕设置',
-                onPressed: () => _panel(widget.onDanmakuSettings!),
-                child: const Icon(Icons.tune_rounded, size: 19),
-              ),
-          ],
-        ),
+        child: _danmakuTool(),
       ),
     );
   }
@@ -696,10 +684,14 @@ class _PlayerControlsState extends State<PlayerControls> {
         mainAxisSize: MainAxisSize.min,
         children: [
           if (mobile)
-            _mobileControlRow(fullscreen: fullscreen)
+            _mobileControlRow(
+              fullscreen: fullscreen,
+              compact: constraints.maxHeight < 320,
+            )
           else
             _desktopControlRow(
               fullscreen: fullscreen,
+              compact: constraints.maxHeight < 320,
               showEpisodes: showEpisodes,
               showSpeedQuality: showSpeedQuality,
               showPush: showPush,
@@ -994,6 +986,31 @@ class _PlayerControlsState extends State<PlayerControls> {
     );
   }
 
+  bool get _hasDanmakuSettings =>
+      widget.showDanmaku && widget.onDanmakuSettings != null;
+
+  double get _danmakuSettingsWidth =>
+      MediaQuery.textScalerOf(context).scale(13) * 4 + 48;
+
+  Widget _danmakuSettingsTool() => SizedBox(
+    width: _danmakuSettingsWidth,
+    child: TextButton.icon(
+      key: const ValueKey('player-danmaku-settings'),
+      style: TextButton.styleFrom(
+        foregroundColor: Colors.white,
+        backgroundColor: Colors.black.withValues(alpha: .36),
+        side: BorderSide(color: Colors.white.withValues(alpha: .12)),
+        minimumSize: const Size(48, 44),
+        visualDensity: VisualDensity.standard,
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        textStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+      ),
+      onPressed: () => _panel(widget.onDanmakuSettings!),
+      icon: const Icon(Icons.settings_outlined, size: 18),
+      label: const Text('弹幕设置'),
+    ),
+  );
+
   Widget _sleepTimerTool() => _toolIcon(
     key: const ValueKey('player-sleep-timer'),
     tooltip: widget.sleepTimerLabel.isEmpty
@@ -1012,6 +1029,7 @@ class _PlayerControlsState extends State<PlayerControls> {
 
   Widget _desktopControlRow({
     required bool fullscreen,
+    required bool compact,
     required bool showEpisodes,
     required bool showSpeedQuality,
     required bool showPush,
@@ -1020,6 +1038,7 @@ class _PlayerControlsState extends State<PlayerControls> {
     required double volume,
   }) {
     final tools = [
+      if (_hasDanmakuSettings) _danmakuSettingsTool(),
       if (widget.onSleepTimer != null) _sleepTimerTool(),
       if (widget.onCatchup != null) _catchupTool(),
       if (showSpeedQuality) ...[
@@ -1080,7 +1099,9 @@ class _PlayerControlsState extends State<PlayerControls> {
       padding: const EdgeInsets.fromLTRB(8, 0, 8, 0),
       child: _episodeToolRow(
         tools,
+        compact: compact,
         toolsWidth:
+            (_hasDanmakuSettings ? _danmakuSettingsWidth : 0) +
             (showSpeedQuality ? 118 : 0) +
             48.0 *
                 ((widget.onSleepTimer != null ? 1 : 0) +
@@ -1097,8 +1118,9 @@ class _PlayerControlsState extends State<PlayerControls> {
     );
   }
 
-  Widget _mobileControlRow({required bool fullscreen}) {
+  Widget _mobileControlRow({required bool fullscreen, required bool compact}) {
     final tools = [
+      if (_hasDanmakuSettings) _danmakuSettingsTool(),
       if (widget.onSleepTimer != null) _sleepTimerTool(),
       if (widget.onCatchup != null) _catchupTool(),
       _toolText(
@@ -1138,7 +1160,9 @@ class _PlayerControlsState extends State<PlayerControls> {
       padding: const EdgeInsets.fromLTRB(2, 0, 2, 0),
       child: _episodeToolRow(
         tools,
+        compact: compact,
         toolsWidth:
+            (_hasDanmakuSettings ? _danmakuSettingsWidth : 0) +
             118 +
             48.0 *
                 ((widget.onSleepTimer != null ? 1 : 0) +
@@ -1152,11 +1176,29 @@ class _PlayerControlsState extends State<PlayerControls> {
     );
   }
 
-  Widget _episodeToolRow(List<Widget> tools, {required double toolsWidth}) {
+  Widget _episodeToolRow(
+    List<Widget> tools, {
+    required double toolsWidth,
+    required bool compact,
+  }) {
     if (!_episodeChrome ||
         widget.episodeNumber == null ||
         widget.episodeCount == null) {
       return _clusteredToolRow(tools);
+    }
+    if (compact && _hasDanmakuSettings) {
+      return Row(
+        children: [
+          SizedBox(width: 80, child: _episodeCounter()),
+          const SizedBox(width: 8),
+          Expanded(
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: _toolGroup(tools),
+            ),
+          ),
+        ],
+      );
     }
     return LayoutBuilder(
       builder: (context, constraints) {

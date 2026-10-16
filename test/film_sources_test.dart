@@ -4,6 +4,7 @@ import 'package:duanju_app/app_build.dart';
 import 'package:duanju_app/local_profiles.dart';
 import 'package:duanju_app/local_store.dart';
 import 'package:duanju_app/models.dart';
+import 'package:duanju_app/network_exit.dart';
 import 'package:duanju_app/playback_loader.dart';
 import 'package:duanju_app/player_screen.dart';
 import 'package:duanju_app/sources_screen.dart';
@@ -47,6 +48,22 @@ void main() {
       await tester.pump(const Duration(milliseconds: 10));
     }
   }
+
+  test('cover refusals do not diagnose an IP block or browser challenge', () {
+    const raw = '海报请求失败：HTTP 403';
+    final message = NetworkExit.describe(raw);
+    expect(message, contains(raw));
+    expect(message, contains('防盗链'));
+    expect(message, contains('重新获取海报'));
+    expect(message, isNot(contains('浏览器验证')));
+    expect(message, isNot(contains('可疑')));
+    expect(message, isNot(contains('同一出口')));
+    expect(
+      NetworkExit.describe('example.test HTTP 403：站点要求浏览器验证'),
+      contains('站源要求浏览器验证'),
+    );
+    expect(NetworkExit.describe('海报地址无效'), '海报地址无效');
+  });
 
   test(
     'film sources preserve display names, edition gates and user access',
