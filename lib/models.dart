@@ -10,7 +10,8 @@ class SourceSite {
 
   /// 成人站源。绿色模式开启时不出现在站源管理与选择列表里。
   final bool adult;
-  bool get onlineSearch => id == 'hongguo' || pagedSearch;
+  bool get onlineSearch => id == 'hongguo' || filmSource || pagedSearch;
+  bool get filmSource => id == 'ikanbot' || id == 'a123';
   bool get pagedSearch =>
       id == 'hongguo' ||
       id == 'huangguoai' ||
@@ -50,6 +51,8 @@ class SourceSite {
   };
 
   static const hongguo = SourceSite('hongguo', '红果', '短剧 · 漫剧 · AI 剧');
+  static const ikanbot = SourceSite('ikanbot', '爱看机器人', '电影 · 剧集 · 多线路');
+  static const a123 = SourceSite('a123', 'A123TV', '电影 · 连续剧 · 综艺 · 动漫');
   static const dsd = SourceSite('dsd', '帝果', '懂色帝 · AV 网页目录', adult: true);
   static const duanjuValues = [
     SourceSite('yaguo', '芽果', '星芽短剧 · 登录接口'),
@@ -78,6 +81,8 @@ class SourceSite {
   ];
   static const knownValues = [
     hongguo,
+    ikanbot,
+    a123,
     SourceSite('huangdou', '豆果', '魔改短剧 · 网页目录', adult: true),
     SourceSite('huangju', '剧果', '红果黄剧 · AI 成人短剧', adult: true),
     SourceSite('yeguo', '野果', '野果短剧 · AI 成人短剧', adult: true),
@@ -89,6 +94,8 @@ class SourceSite {
   ];
   static const allValues = [
     hongguo,
+    ikanbot,
+    a123,
     SourceSite('huangdou', '豆果', '魔改短剧 · 网页目录', adult: true),
     SourceSite('huangju', '剧果', '红果黄剧 · AI 成人短剧', adult: true),
     SourceSite('yeguo', '野果', '野果短剧 · AI 成人短剧', adult: true),

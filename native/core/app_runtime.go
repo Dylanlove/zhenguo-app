@@ -32,6 +32,8 @@ type Config struct {
 	YeguoURL         string
 	YeguoAPIURL      string
 	DSDURL           string
+	IkanbotURL       string
+	A123URL          string
 	Token            string
 	AESKeyHex        string
 	InterfaceKey     string
@@ -68,6 +70,8 @@ type Downloader struct {
 	legacy                 *legacyAPIClient
 	previewMu              sync.Mutex
 	previewSessions        map[string]*huangguoPreviewSession
+	filmSessionOnce        sync.Once
+	filmSession            *Downloader
 }
 
 func defaultConfig() Config { return Config{MaxPagesPerSort: 50, PageSize: 30, Retries: 2} }
@@ -113,6 +117,7 @@ type nativeInput struct {
 	Payload          string                  `json:"payload"`
 	Index            int                     `json:"index"`
 	Quality          int                     `json:"quality"`
+	Route            int                     `json:"route"`
 	Session          string                  `json:"session"`
 	Sequence         int64                   `json:"sequence"`
 	Force            bool                    `json:"force"`
@@ -375,7 +380,7 @@ func nativeDispatch(input nativeInput) (any, error) {
 			nativeState.engine = engine
 		}
 		nativeState.Unlock()
-		return map[string]any{"version": "0.2.156", "standalone": true, "allSources": buildAllSources == "true"}, nil
+		return map[string]any{"version": "0.2.159", "standalone": true, "allSources": buildAllSources == "true"}, nil
 	}
 	engine := nativeState.engine
 	nativeState.Unlock()
@@ -528,6 +533,13 @@ func nativeDispatch(input nativeInput) (any, error) {
 	case "cancelPlayback":
 		engine.nativeCancelPlayback(input.Sequence)
 		return true, nil
+	case "selectRoute":
+		playback, finish, err := engine.nativeBeginPlayback(ctx, input.Sequence)
+		if err != nil {
+			return nil, err
+		}
+		defer finish()
+		return engine.nativeSelectFilmRoute(playback, input.Session, input.Route)
 	case "release":
 		engine.nativeReleasePlayback(input.Session)
 		return true, nil
@@ -632,6 +644,22 @@ func (engine *nativeEngine) nativeCatalog(ctx context.Context, input nativeInput
 		result.HasMore = more
 		return result, nil
 	}
+	if query != "" && isFilmProviderSource(source) {
+		var items []Drama
+		var err error
+		if source == sourceIkanbot {
+			items, result.HasMore, err = d.fetchIkanbotCatalogPage(ctx, page, "", query)
+		} else {
+			items, result.HasMore, err = d.fetchA123CatalogPage(ctx, page, "", query)
+		}
+		if err != nil {
+			return result, err
+		}
+		for _, drama := range items {
+			result.Items = append(result.Items, nativeNormalize(drama))
+		}
+		return result, nil
+	}
 	if query != "" && isDuanjuProviderSource(source) {
 		if !duanjuSupportsSearch(source) {
 			return result, fmt.Errorf("%s 暂不支持在线搜索，可在已加载内容中筛选", duanjuSourceName(source))
@@ -718,6 +746,10 @@ func (engine *nativeEngine) nativeCatalog(ctx context.Context, input nativeInput
 		items, result.HasMore, err = d.fetchYeguoCatalogPage(ctx, page, category, "")
 	case sourceDSD:
 		items, result.HasMore, err = d.fetchDSDCatalogPage(ctx, page, category, "")
+	case sourceIkanbot:
+		items, result.HasMore, err = d.fetchIkanbotCatalogPage(ctx, page, category, "")
+	case sourceA123:
+		items, result.HasMore, err = d.fetchA123CatalogPage(ctx, page, category, "")
 	case sourceHuangguoVideo:
 		address := fmt.Sprintf("%s/videos?page=%d", d.providerBaseURL(source), page)
 		if category != "" {
@@ -739,7 +771,7 @@ func (engine *nativeEngine) nativeCatalog(ctx context.Context, input nativeInput
 	if err != nil && len(items) == 0 {
 		return result, err
 	}
-	if len(items) == 0 && page == 1 && source != sourceHuangju && source != sourceYeguo && source != sourceDSD && !isDuanjuProviderSource(source) {
+	if len(items) == 0 && page == 1 && source != sourceHuangju && source != sourceYeguo && source != sourceDSD && !isDuanjuProviderSource(source) && !isFilmProviderSource(source) {
 		return result, errors.New("站源暂未返回剧集，请稍后刷新")
 	}
 	if err != nil {
@@ -779,6 +811,10 @@ func (engine *nativeEngine) nativeDetail(ctx context.Context, drama nativeDrama)
 		raw, chapters, err = engine.downloader.fetchYeguoDetail(ctx, sourceID)
 	case sourceDSD:
 		raw, chapters, err = engine.downloader.fetchDSDDetail(ctx, sourceID)
+	case sourceIkanbot:
+		raw, chapters, err = engine.downloader.fetchIkanbotDetail(ctx, sourceID)
+	case sourceA123:
+		raw, chapters, err = engine.downloader.fetchA123Detail(ctx, sourceID)
 	default:
 		if isDuanjuProviderSource(source) {
 			raw, chapters, err = engine.downloader.fetchDuanjuDetail(ctx, source, sourceID)
@@ -838,5 +874,8 @@ func (engine *nativeEngine) nativeResolve(ctx context.Context, input nativeInput
 		return nativePlan{}, err
 	}
 	choice := nativePlaybackChoices(media, input.Quality)
+	if source := sourceFromDramaID(input.Drama.ID); isFilmProviderSource(source) {
+		choice.source = source
+	}
 	return engine.nativeOpenPlayback(ctx, choice)
 }

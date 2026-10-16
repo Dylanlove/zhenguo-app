@@ -442,17 +442,21 @@ func (engine *nativeEngine) loadSourceCatalogCategory(ctx context.Context, sourc
 		return nil
 	}
 	key := nativeCatalogKey(source, category)
-	engine.mu.Lock()
-	state, found := engine.catalogStates[key]
-	engine.mu.Unlock()
-	tail := 1
-	if found && state.HasMore {
-		tail = max(1, state.Page+1)
-	}
 	if rescanHead {
 		if err := engine.loadSourceCatalogCategoryPage(ctx, source, category, 1); err != nil {
 			return err
 		}
+		pages--
+	}
+	engine.mu.Lock()
+	state, found := engine.catalogStates[key]
+	engine.mu.Unlock()
+	if found && !state.HasMore {
+		return nil
+	}
+	tail := 1
+	if found {
+		tail = max(1, state.Page+1)
 	}
 	for loaded := 0; loaded < pages; loaded++ {
 		page := tail + loaded

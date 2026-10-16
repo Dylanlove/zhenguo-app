@@ -681,6 +681,9 @@ class TelevisionSettingsDialog extends StatelessWidget {
     this.preloadStatus = '',
     this.enhancement,
     this.onCompareEnhancement,
+    this.routeIndex = 0,
+    this.routeCount = 0,
+    this.onRoute,
   });
   final double speed;
   final int quality;
@@ -695,6 +698,9 @@ class TelevisionSettingsDialog extends StatelessWidget {
   final String preloadStatus;
   final VideoEnhancementController? enhancement;
   final VoidCallback? onCompareEnhancement;
+  final int routeIndex;
+  final int routeCount;
+  final ValueChanged<int>? onRoute;
 
   @override
   Widget build(BuildContext context) => AlertDialog(
@@ -748,6 +754,24 @@ class TelevisionSettingsDialog extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 20),
+            if (onRoute != null && routeCount > 1) ...[
+              const Text('播放线路', style: TextStyle(fontSize: 18)),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  for (var route = 0; route < routeCount; route++)
+                    RemoteButton(
+                      key: ValueKey('tv-route-$route'),
+                      label: '线路 ${route + 1}',
+                      selected: route == routeIndex,
+                      onPressed: () => onRoute!(route),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 20),
+            ],
             if (enhancement != null)
               VideoEnhancementSettings(
                 controller: enhancement!,

@@ -63,6 +63,10 @@ func validNativeCategory(source, category string) bool {
 		return validYeguoCategory(category)
 	case sourceDSD:
 		return webProviderNumericID.MatchString(category)
+	case sourceIkanbot:
+		return validFilmCategory(ikanbotCategories, category)
+	case sourceA123:
+		return validFilmCategory(a123Categories, category)
 	}
 	if isDuanjuProviderSource(source) {
 		return validDuanjuCategory(source, category)
@@ -83,6 +87,10 @@ func (engine *nativeEngine) nativeCategories(ctx context.Context, source string,
 		return append(all, nativeAICategories...), nil
 	case sourceHuangdou:
 		return all, nil
+	case sourceIkanbot:
+		return append(all, ikanbotCategories...), nil
+	case sourceA123:
+		return append(all, a123Categories...), nil
 	}
 	engine.mu.Lock()
 	cached := append([]nativeCategory{}, engine.categoryOptions[source]...)

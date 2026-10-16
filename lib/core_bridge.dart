@@ -210,6 +210,8 @@ abstract class AppRepository {
   Future<DramaDetail> detail(Drama drama);
   Future<PlaybackPlan> resolve(Drama drama, Episode episode, {int quality = 0});
   Future<PlaybackPlan> fallback(PlaybackPlan current);
+  Future<PlaybackPlan> selectRoute(PlaybackPlan current, int route) async =>
+      throw AppFailure('当前播放器不支持手动切换线路');
   Future<void> cancelPlayback();
   Future<void> release(String session);
 }
@@ -840,6 +842,16 @@ class NativeRepository extends AppRepository {
         await _call({
           'action': 'fallback',
           'session': current.session,
+          'sequence': ++_playbackSequence,
+        }),
+      );
+  @override
+  Future<PlaybackPlan> selectRoute(PlaybackPlan current, int route) async =>
+      PlaybackPlan.fromJson(
+        await _call({
+          'action': 'selectRoute',
+          'session': current.session,
+          'route': route,
           'sequence': ++_playbackSequence,
         }),
       );

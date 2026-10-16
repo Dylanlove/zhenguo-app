@@ -4,16 +4,144 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	htmltext "html"
+	"net/http/cookiejar"
 	"net/url"
 	"regexp"
 	"strconv"
 	"strings"
 
 	"golang.org/x/net/html"
+	"golang.org/x/net/publicsuffix"
 )
 
 type providerTextUserAgentKey struct{}
 type providerTextNoCacheKey struct{}
+
+func isFilmProviderSource(source string) bool {
+	return source == sourceIkanbot || source == sourceA123
+}
+
+func validFilmCategory(categories []nativeCategory, category string) bool {
+	if category == "" {
+		return true
+	}
+	for _, item := range categories {
+		if item.ID == category {
+			return true
+		}
+	}
+	return false
+}
+
+func (d *Downloader) filmDownloader() *Downloader {
+	d.filmSessionOnce.Do(func() {
+		client := *d.client
+		client.Jar, _ = cookiejar.New(&cookiejar.Options{PublicSuffixList: publicsuffix.List})
+		d.filmSession = &Downloader{cfg: d.cfg, client: &client, limiter: d.limiter,
+			proxyRouter: d.proxyRouter, diagnostics: d.diagnostics, providerHosts: map[string]string{}}
+	})
+	return d.filmSession
+}
+
+func (d *Downloader) fetchFilmText(ctx context.Context, source, path, referer string) (string, string, error) {
+	site := d.providerBaseURL(source)
+	address := filmResolveURL(site+"/", path)
+	base, baseErr := url.Parse(site)
+	parsed, err := url.Parse(address)
+	if baseErr != nil || err != nil || !isProviderHTTPMediaURL(address) || providerMediaOrigin(parsed) != providerMediaOrigin(base) {
+		return "", "", errors.New("影视站源请求地址无效")
+	}
+	if referer == "" {
+		referer = site + "/"
+	}
+	agent := a123UserAgent
+	if source == sourceIkanbot {
+		agent = ikanbotUserAgent
+	}
+	responses := &playbackResponseURLs{}
+	ctx = context.WithValue(ctx, playbackResponseURLsKey{}, responses)
+	ctx = context.WithValue(ctx, providerTextExactURLKey{}, true)
+	ctx = context.WithValue(ctx, providerTextUserAgentKey{}, agent)
+	body, err := d.filmDownloader().fetchProviderText(ctx, address, referer)
+	if err != nil {
+		return "", "", err
+	}
+	if actual, found := responses.values.Load(address); found {
+		address = actual.(string)
+	}
+	parsed, err = url.Parse(address)
+	if err != nil || providerMediaOrigin(parsed) != providerMediaOrigin(base) {
+		return "", "", errors.New("影视站源已重定向至其他站点，请稍后重试")
+	}
+	return body, address, nil
+}
+
+func filmDocument(body string) (*html.Node, error) {
+	if len(body) > 4<<20 {
+		return nil, errors.New("影视站源页面过大")
+	}
+	return html.Parse(strings.NewReader(body))
+}
+
+func filmMeta(document *html.Node, names ...string) string {
+	for _, name := range names {
+		for _, node := range providerHTMLNodes(document, func(node *html.Node) bool { return node.Data == "meta" }) {
+			if firstNonEmpty(providerHTMLAttr(node, "property"), providerHTMLAttr(node, "name")) == name {
+				if value := strings.TrimSpace(providerHTMLAttr(node, "content")); value != "" {
+					return value
+				}
+			}
+		}
+	}
+	return ""
+}
+
+func filmMediaURL(raw, pageURL string) string {
+	if strings.TrimSpace(raw) == "" {
+		return ""
+	}
+	address := filmResolveURL(pageURL, raw)
+	parsed, err := url.Parse(address)
+	if err != nil || !isProviderHTTPMediaURL(address) {
+		return ""
+	}
+	path := strings.ToLower(parsed.Path)
+	if !strings.HasSuffix(path, ".m3u8") && !strings.HasSuffix(path, ".mp4") {
+		return ""
+	}
+	return address
+}
+
+func filmResolveURL(pageURL, reference string) string {
+	base, err := url.Parse(pageURL)
+	if err != nil {
+		return ""
+	}
+	reference = strings.TrimSpace(htmltext.UnescapeString(strings.ReplaceAll(reference, `\/`, `/`)))
+	if reference == "" {
+		return ""
+	}
+	address, err := url.Parse(reference)
+	if err != nil {
+		return ""
+	}
+	return base.ResolveReference(address).String()
+}
+
+func (d *Downloader) filmMedia(source, address, referer string) providerMedia {
+	parsed, _ := url.Parse(address)
+	agent := a123UserAgent
+	if source == sourceIkanbot {
+		agent = ikanbotUserAgent
+	}
+	cookies := []string{}
+	for _, cookie := range d.filmDownloader().client.Jar.Cookies(parsed) {
+		cookies = append(cookies, cookie.Name+"="+cookie.Value)
+	}
+	return providerMedia{URL: address, Referer: referer, credentials: &providerMediaCredentials{
+		origin: providerMediaOrigin(parsed), userAgent: agent, referer: referer, cookie: strings.Join(cookies, "; ")}}
+}
 
 var webProviderNumericID = regexp.MustCompile(`^[1-9][0-9]{0,17}$`)
 

@@ -1,13 +1,13 @@
 # 红果鉴 / 真果鉴
 
-Flutter 多端独立短剧应用，原名“短剧库 APP”。站源请求、解析、下载和播放均在设备上完成。当前源码版本：**0.2.156+2169（开发快照）**，最近正式发布版本为 **0.2.155+2168**。本轮将弹幕重构为用户自定义 API 驱动的通用系统，重新实现显示、轨道排列、时间同步和设置面板；保留 Flutter 播放器、Go 播放核心及现有播放器 UI 改动。定向自动化验证已完成，新版本安装包构建、真实第三方 API 联调及设备验收仍待完成。
+Flutter 多端独立短剧应用，原名“短剧库 APP”。站源请求、解析、下载和播放均在设备上完成。当前源码版本：**0.2.159+2172（开发快照）**，最近正式发布版本为 **0.2.155+2168**。本轮新增“爱看机器人”和“A123TV”，接入分类、在线中文搜索、详情、选集、MP4 / M3U8 和手动线路选择；已执行真实站源文本、分页、分集、双线路清单及媒体信息探测，验证范围与限制见下文。此前的弹幕按钮、网络、下载、剧库导入及 Actions 修复保留；本轮未生成完整安装包，实际设备验收仍待完成。
 
 公开仓库为 [youniube/zhenguo-app](https://github.com/youniube/zhenguo-app)。主版本正式标签为 `v0.2.155`，Android 6 兼容版正式标签为 `android6-0.2.155`，分别触发对应的正式发布流程。普通提交只生成两版 Android 8.0+ 和 IPA 测试包；Windows 和 Android 6 兼容版仅在正式版本标签触发时构建，正式版本标签才发布 Release。构建结果以 [GitHub Actions](https://github.com/youniube/zhenguo-app/actions) 为准，正式安装包见 [GitHub Releases](https://github.com/youniube/zhenguo-app/releases)。真实设备安装、视觉、播放、回看及站源验收仍待集中验证；构建和自动化检查通过不代表实际设备已完成验收。
 
 | 编译方式 | 应用名称 | 可用站源 |
 | --- | --- | --- |
 | 默认，不加参数 | 红果鉴 | 仅红果 |
-| 构建脚本加 `--all-sources` | 真果鉴 | 红果、豆果、剧果、野果、帝果、黄果视频、黄果 AI、黄果旧版、芽果、猫果、河果、星果、花果、伍果、超果、米果、爽果、艳果、桃果、柚果、榴果、美果、城果、宵果、樱果、露果、荔果、橘果、枣果、柠果、芒果 |
+| 构建脚本加 `--all-sources` | 真果鉴 | 红果、爱看机器人、A123TV、豆果、剧果、野果、帝果、黄果视频、黄果 AI、黄果旧版、芽果、猫果、河果、星果、花果、伍果、超果、米果、爽果、艳果、桃果、柚果、榴果、美果、城果、宵果、樱果、露果、荔果、橘果、枣果、柠果、芒果 |
 
 直播入口按编译版本区分：默认红果鉴隐藏直播，在“关于红果鉴”输入 `Shineyue` 后激活；真果鉴默认显示直播，不需要激活码。
 
@@ -39,7 +39,7 @@ Flutter 多端独立短剧应用，原名“短剧库 APP”。站源请求、�
 | 手机播放 | 普通点剧直接进入播放。左侧上下滑调亮度，右侧上下滑调音量；左右滑动暂停并预览进度，松开定位并恢复原播放状态。左 / 右区域双击后退 / 前进 10 秒，中间双击播放 / 暂停，轻点显示 / 隐藏控制栏。长按 350 毫秒按播放设置临时加速，松开恢复。手势提示在顶部显示图标、百分比、目标时间或倍速，沿用原项目 2 秒显示时长。返回、手机旋转图标、倍速、清晰度、推送、弹幕和画中画在画面控制层；居中按钮与选集 / 简介 / 下载 Tab 保留 |
 | 画中画 | 0.2.20 在 Android 手机 / 平板播放器接入画中画按钮；0.2.37 起进入画中画前先隐藏 App 自绘控制层和弹幕覆盖并等待一帧，小窗只保留视频画面，转场使用视频区域 `sourceRectHint`，播放 / 暂停 / 返回应用 / 关闭交给系统 PiP 控件。0.2.38 修正非全屏进入 PiP 时下方 Tab 内容也被缩进小窗的问题，PiP 请求期间整页只渲染播放器。进入画中画后保持当前播放和进度保存，退出后恢复常规生命周期处理。Android TV、Windows 与 iOS 暂未接入系统级画中画，真实设备行为待集中验证 |
 | 画质增强 | 仅 Windows 桌面端显示入口并运行增强链路；播放器“清晰度”面板可操作画质增强，支持关闭 / 自动 / 省电增强 / 清晰优先，开启后显示通用／真人、动漫／AI 动漫与跟随分类。增强应用后可点“原画对比”，再次点击恢复。Android 手机、Android TV 与 iOS 隐藏该功能，不初始化增强后端，避免移动端和电视端卡死 |
-| 弹幕 | 在“播放设置 → 弹幕设置 → 数据源”添加兼容弹弹play的 API 并选择默认源；有有效剧名和分集的在线站源统一使用。播放器“弹”字按钮快速隐藏或显示，旁边的设置入口打开数据源 / 显示 / 高级三个页签；电视控制区及播放设置均可进入。配置、开关和手动匹配按用户保存并进入备份，本地播放不加载在线弹幕 |
+| 弹幕 | 在“播放设置 → 弹幕设置 → 数据源”添加兼容弹弹play的 API 并选择默认源；有有效剧名和分集的在线站源统一使用。手机和桌面播放器显示白色圆圈“弹”字按钮，关闭时右下角带禁用小圆标，点击切换；旁边的设置入口打开数据源 / 显示 / 高级三个页签。电视控制区及播放设置均可进入。配置、开关和手动匹配按用户保存并进入备份，本地播放不加载在线弹幕 |
 | 横竖屏 | 电视模式统一保持横屏，竖屏视频按原比例居中；手机竖屏播放页不再显示额外标题栏，视频下方紧贴 Tab 内容区，选集和下载在视频下方用连续滚动紧凑方格显示，不遮挡画面；横屏采用视频与选集分栏。横屏视频随手机旋转进入全屏，也可手动全屏；退出后恢复方向跟随。全屏顶部只放返回和标题并避让状态栏，底部统一提供播放、进度、选集、倍速 / 画质、推送、弹幕、画中画和全屏，桌面端额外提供音量，底部控件整体避让虚拟导航栏；全屏设置与选集弹窗保持播放器暗色 |
 | Windows | 播放画面获焦时，空格播放 / 暂停，左方向键后退 5 秒，右方向键轻按前进 5 秒、长按使用播放设置中的临时倍速，上下方向键调音量 5%，M 静音，F / F11 / Ctrl+F 全屏，Esc 退出全屏或返回；按钮、菜单和列表保留自身键盘操作 |
 | 外观 | “更多 → 设置与备份 → 外观主题”选择浅色、深色或跟随系统；默认跟随系统，记住本机手动选择，配置备份也包含主题 |
@@ -49,6 +49,8 @@ Flutter 多端独立短剧应用，原名“短剧库 APP”。站源请求、�
 | 站源 | 浏览与播放 | 搜索 |
 | --- | --- | --- |
 | 红果 | 真人剧、漫剧、AI 剧及分集 | 联网搜索与官网搜索联想 |
+| 爱看机器人（全站源版） | 热门电影、热门剧集与 9 个剧集分类；详情页动态令牌签名、跨线路分集合并、选集与多线路播放 | 站内中文搜索，源站结果不分页 |
+| A123TV（全站源版） | 首页推荐及电影、连续剧、综艺、动漫、福利分类；真实简介、封面地址、分集与 `pp.la` 多线路播放 | 站内中文搜索，源站结果不分页 |
 | 黄豆（全站源版） | 列表、VIP 标记及分集 | 筛选已加载短剧 |
 | 剧果（全站源版） | 热门、最新、接口分类、详情及可播放分集；签名 Cookie 接入在线播放、预加载和下载，待验证 | 站源在线搜索，支持继续加载 |
 | 野果（全站源版） | 接口实际分类、目录、详情及真实分集；默认从 `analyze.buxefaex.cc` 进入，支持 `ygdj7.com` 线路发现页和备用线路域名；按分集重新取流，保留接口提供的 H.264 / H.265 地址，待验证 | 站源在线分页搜索 |
@@ -59,6 +61,40 @@ Flutter 多端独立短剧应用，原名“短剧库 APP”。站源请求、�
 | 芽果、猫果、河果、星果、花果、网果、发果、皮果、伍果（全站源版） | 已接入设备端目录、详情、分集与播放解析；部分站源使用网页解析、登录令牌或签名接口，均待集中验证 | 按各站源实际接口接入；河果、星果等无稳定服务端搜索的站源保留已加载内容筛选 |
 
 站源可用性、清晰度和区域限制取决于源站及网络；应用不解除源站 VIP 或其他授权限制。
+
+### 爱看机器人与 A123TV（0.2.159）
+
+两个新入口仅在真果鉴全站源版开放，沿用原有站源权限、分类、搜索、详情、选集和播放器；已有受限用户需由管理员分配新增站源权限。普通播放菜单的“清晰度”和电视“播放设置”中增加“播放线路”，仅对这两个新源显示；换线保留当前进度、倍速与暂停状态。错误页仍可“重试播放”，并提供“选择播放线路”，自动恢复沿用现有最多 3 次尝试的限制。
+
+- **爱看机器人**：站源 ID `ikanbot`，入口 `https://www1.ikanbot.com`。分类读取 `/hot/index-{分类}.html`，后续页使用页面提供的 `-p-{页码}.html`；搜索 `/search?q=...`。每次详情 / 重新解析先读取 `/play/{id}` 中的 `current_id`、`e_token`、`mtype`，按原站算法用 ID 末四位从令牌逐段取字符，再调用 `/api/getResN`。仅接口明确返回 `-401` 时重新取页与签名一次。按集号合并各线路，保留额外分集，清除地址后的 `$线路名`；不保存固定 token，不用失效的旧地址掩盖令牌错误。源站未提供完整剧情时，简介显示实际返回的年份、地区和演职员资料。
+- **A123TV**：站源 ID `a123`，入口 `https://a123tv.com`。使用 `/t/{分类}.html`、`/t/{分类}/p{页码}.html` 和 `/s/{关键词}.html`，按实际分页链接判断后续页。首页和搜索均不虚构后续分页。详情 `/v/{slug}.html` 解析真实选集和简介，播放时请求该集 `/v/{slug}/{code}.html`，核对 `pp.no`、`pp.ld` 和 `pp.la` 的集号与线路集数；只保留该集实际存在的地址，避免缺集线路退回第一集。
+- **网络与播放**：两源使用独立于旧源的 Cookie 会话，复用现有请求限流、错误退避、设备内媒体服务和播放器。媒体请求传递对应 User-Agent、Referer 与来源所需 Cookie，Cookie 限定来源；保留真实 HTTP / HTTPS 地址和签名查询参数。播放清单按选中的线路延迟读取，首条线路异常不会在创建播放计划前丢失其他备选地址。没有新增远程代理，也没有改动旧站源的解析分支。
+
+协议和结构参考 [wokaotianshi123/guoapp3，固定快照 bf9f26a](https://github.com/wokaotianshi123/guoapp3/tree/bf9f26a0b6cb64038a2d266f7c9045fc950099a8)，已完整阅读两份适配器及 `provider_media.go`、`app_categories.go`、`app_runtime.go`、`native/server/main.go`，并核对真实页面与接口文本。本次按协议和页面结构独立实现，未整文件复制上游适配器。该参考快照未附仓库根级 LICENSE / COPYING，公开分发前仍需核对上游代码授权和第三方站点的使用条件；公开页面可访问不代表取得影视内容的分发授权。
+
+本轮修改文件：
+
+| 用途 | 文件 |
+| --- | --- |
+| 两个站源适配器 | `native/core/provider_ikanbot.go`、`native/core/provider_a123.go` |
+| 设备请求、站源识别与媒体分发 | `native/core/provider_web.go`、`native/core/provider_huangguo.go`、`native/core/provider_media.go` |
+| 分类、详情、封面补齐、健康检测与线路会话 | `native/core/app_categories.go`、`native/core/app_runtime.go`、`native/core/app_cover_metadata.go`、`native/core/app_source_health.go`、`native/core/app_playback_routes.go` |
+| 界面注册与线路操作 | `lib/models.dart`、`lib/core_bridge.dart`、`lib/playback_loader.dart`、`lib/player_menu.dart`、`lib/player_screen.dart`、`lib/television_controls.dart` |
+| 新增验收与回归用例 | `native/core/provider_film_test.go`、`test/film_sources_test.dart` |
+| 版本与说明 | `pubspec.yaml`、`pubspec.android6.yaml`、`lib/app_layout.dart`、本 README |
+
+真实站源验证使用中文“三体”，只读取页面 / JSON / 清单及播放器所需媒体，不请求或处理站源图片。封面仅校验解析到的 URL。结果为抽样验收，不代表全部影片或全部线路可用：
+
+| 项目 | 爱看机器人 | A123TV |
+| --- | --- | --- |
+| 分类 | 11 类及“全部”返回 | 5 类及“全部”返回 |
+| 首页与列表 | 首页正常；热门剧集第 1、2 页各 24 项 | 首页正常；连续剧第 1、2 页各 36 项 |
+| 中文搜索 | “三体”返回 10 项 | “三体”返回 20 项 |
+| 详情与选集 | 《三体》40 集，含彩蛋；第 2 集地址与第 1 集不同 | 《三体》40 集，含彩蛋；第 2 集地址与第 1 集不同 |
+| 去重后的当集线路 | 30 条，抽查线路 1、2 清单可读 | 34 条，抽查线路 1、5 清单可读 |
+| 实际媒体信息探测 | 设备内媒体通道经 FFprobe 识别 H.264 / AAC | 设备内媒体通道经 FFprobe 识别 H.264 / AAC |
+
+A123TV 抽查的线路 2 上游返回 HTTP 404，线路 3、4 返回 HTTP 403；应用保留正常报错、退避和其他可选线路，不关闭证书校验或绕过访问限制。真实抽样取得的是 M3U8；MP4 的地址校验、请求头与线路切换由本机 HTTP 回归用例覆盖，未宣称完成真实 MP4 影片验收。Android 手机 / Android TV / iOS / Windows 完整安装包、音画播放与长时间稳定性未进行设备验收。
 
 ### 央视频直播：YSP Live v9.4 设备端适配（0.2.152，待验证）
 
@@ -827,6 +863,9 @@ dart analyze --fatal-infos lib test integration_test test_driver
 flutter test --dart-define=DISABLE_REMOTE_IMAGES=true
 flutter test --dart-define=DISABLE_REMOTE_IMAGES=true --dart-define=ALL_SOURCES=true
 cd native
+go vet ./...
+go test -count=1 -timeout 2m ./...
+go test -count=1 -timeout 2m -ldflags="-X duanjuapp/native/core.buildAllSources=true" ./...
 go test -race ./...
 go test -race -ldflags="-X duanjuapp/native/core.buildAllSources=true" ./...
 ~~~
@@ -1024,11 +1063,25 @@ unzip ../真果·鉴-YYYYMMDDHHMM.zip -d ../restore
 
 ### 当前检查与平台状态
 
+0.2.159+2172 新增爱看机器人与 A123TV。Windows 开发机的 Go 全量 `go test ./... -count=1`、`go vet ./...` 通过，两源与播放线路的定向 `-race` 检查通过；Android arm64 `CGO_ENABLED=0 go build ./core` 通过。变更 Dart 文件静态分析无 error / warning，保留 `player_screen.dart` 的 2 条既有空 catch 提示。新增站源、播放、电视遥控、加载取消、恢复及导航六份 Flutter 定向测试，全站源版 36 项通过，默认版 32 项通过、4 项新增源播放用例按版本跳过；覆盖新源在站源管理中的实际显示名、双向切线、进度 / 暂停保留、自动恢复耗尽后的手动选线和迟到会话清理。真实站点验证结果见上方站源说明；本轮已按用户要求恢复该范围验证，远程图片均禁用。
+
+扩大到原有站源管理与分类 UI 回归时，默认版出现 3 项失败，全站源版出现 4 项失败；临时移除本轮两个新源的注册再运行同组用例，分别复现同样的 3 / 4 项失败，之后已逐字节恢复注册文件。`sources_test.dart` 的访客夹具为多用户配置提供了没有密码的管理员，现有规则会锁定该配置；`sources_screen_test.dart` 的两个黄果卡片用例未处理默认版站源限制 / 全站源版默认绿色模式；`catalog_categories_test.dart` 的黄果分类用例也未关闭绿色模式。保留现有用户访问与绿色模式规则，这些既有用例尚未修订，不将扩大回归标为全部通过。
+
+本轮日志在 `build/film-sources-02159/`：`live.log`（真实站源、第二页 / 第二集、FFprobe、上游 404 / 403）、`go-all.log`、`go-vet.log`、`go-targeted-race.log`、`dart-analyze.log`、`flutter-targeted-all.log`、`flutter-targeted-default.log`（定向）、`flutter-all-sources.log` / `flutter-default.log`（扩大回归）与 `baseline-all-sources.log` / `baseline-default.log`（去掉新增注册的对照）。这些是本地验证产物，不进入纯源码包。本轮未构建或发布完整 APK / Windows / iOS 安装包，未启动设备或模拟器。
+
+0.2.158+2171 按用户提供的两张播放器截图重做手机和桌面的弹幕开关图标：白色细圆圈内显示“弹”，关闭时右下角增加独立的禁用小圆标，并对重叠处留出透明间隔；两种状态保持相同位置和尺寸，使用 48×48 点击区域。沿用弹幕开关回调、用户偏好保存与设置入口，并为辅助功能提供当前开关状态。两份 Dart 源码格式检查及定向静态分析通过，无 error / warning，保留 `player_controls.dart` 既有的 1 条 import 提示；使用 Flutter 引擎直接渲染并检查两种图标的正常与放大效果，预览为 `build/danmaku-button-preview.png`。按开发约定暂不执行测试与回归，本轮未构建安装包、未进行设备视觉验收，属于开发快照。
+
+0.2.157+2170 修复 Go 检查：网络兼容会话改为显式创建独立浏览器传输对象，避免复制 Mutex，并通过本地 HTTPS 验证原会话仍保持证书校验；站源更新将首页计入分页预算，继续加载从已保存页之后开始，已耗尽目录不重复抓取；下载读取循环在每次读取前检查取消信号，避免取消后继续排空已缓冲响应；剧库导入保留已有封面地址并补齐缺失值。目录持久化测试统一使用单页配置，生产环境每分类默认 50 页保持原值，并发写入测试增加有界等待和清理；Windows 测试使用 JSON 编码目录路径，POSIX `0600` 权限断言只在支持该语义的平台执行，Windows 继续验证会话文件持久化与重用。
+
+本轮在 Windows x64 上分别使用与 Actions 一致的 Go 1.24.1、以及本机 Go 1.26.4 完整执行两版 `go test -count=1 -timeout 120s ./...`：默认红果版按顶层用例计 156 项通过、15 项按条件跳过，全站源真果版 157 项通过、14 项按条件跳过，两个 Go 版本均无失败，`go vet ./...` 均通过。Go 1.26.4 下，目录、导入、下载、分页及网络兼容会话的定向 `-race` 检查 33 项通过、1 项因缺少系统 xz 跳过，无数据竞争报告。跳过的全量用例涉及显式关闭的真实站源联调、Windows 符号链接权限、系统 xz，以及默认版不包含的非红果站源；本轮未访问站源图片。新增的缓冲响应取消回归用例使用 Git HEAD 的原下载实现进行 overlay 对照，稳定复现“取消后仍读完响应”，修复后通过。Python 脚本检查 22 项，其中 20 项通过、2 项按环境跳过。验证日志为 `build/go-fix-default.jsonl`、`build/go-fix-all-sources.jsonl`、`build/go-fix-go124-default.jsonl`、`build/go-fix-go124-all-sources.jsonl`、`build/go-fix-race.jsonl`、`build/go-fix-vet.log`、`build/go-fix-go124-vet.log` 和 `build/go-fix-cancel-baseline.log`。
+
+GitHub Actions 的 `checks` 作业新增两版 Go 全量测试和 `go vet`，使用 `native/go.mod` 指定的 Go 1.24.1；后续打包依赖这些检查通过。本轮未在本机生成 Android、Windows 或 iOS 安装包，未触发远程 Actions，未进行设备验收。
+
 0.2.156+2169 是通用弹幕开发快照。本轮 `dart format --output=none --set-exit-if-changed lib test integration_test test_driver` 与 `dart analyze lib test integration_test test_driver` 已执行，静态分析保留 10 条既有 info，无 error / warning。弹幕、API、设置 UI、播放器、导航、电视遥控、播放恢复及本地持久化共九份测试：全站源版 74 项通过，默认红果版 73 项通过、1 项非红果站源用例按版本跳过。测试只使用合成数据与本地 HTTP 服务，远程图片已禁用；覆盖 60,000 条输入的采样、20,000 条瞬时弹幕的测量限制、混合类型不相交、暂停 / 倍速 / 缓冲 / seek、用户隔离、手动匹配持久化，以及 360×640、844×390、768×1024、1280×720 布局与遥控焦点。已生成并检查 `build/danmaku-qa/` 的合成渲染图。
 
-两版 Go 核心的播放、流、权限和签名 / 解密相关定向用例通过；Windows x64 Go C ABI 核心已实际编译为 `windows/runner/duanju_core.dll`。Python 脚本检查 22 项，其中 20 项通过、2 项按环境跳过。Go 全量核心测试仍在目录分页 / 缓存用例中失败，并触发 `TestNativeCatalogMetadataSaveExcludesInFlightCursor` 的旧测试 panic；其中 `TestNativeHongguoStalledCursorKeepsPartialItems` 已通过 Git HEAD 源码 overlay 对照，确认改造前同样失败。`go vet ./core ./bridge` 还报告未改动的 `native/core/network_media.go:250` 复制包含 Mutex 的 `huangguoBrowserTransport`。未修改这些目录 / 传输逻辑，也未将 Go 全量检查标记为通过。记录包括 `build/danmaku-final-all-sources.log`、`build/danmaku-final-default.log`、`build/danmaku-go-targeted.log` 与 `build/danmaku-baseline-overlay.json`。
+0.2.156 开发时，两版 Go 核心的播放、流、权限和签名 / 解密相关定向用例通过，Windows x64 Go C ABI 核心曾编译为 `windows/runner/duanju_core.dll`。当时 Go 全量检查在目录分页 / 缓存用例中失败，`TestNativeCatalogMetadataSaveExcludesInFlightCursor` 的模拟请求还会等待异常，`go vet` 报告了 `huangguoBrowserTransport` 的 Mutex 复制；这些问题已在 0.2.157 的修复与完整检查中处理。历史记录包括 `build/danmaku-final-all-sources.log`、`build/danmaku-final-default.log`、`build/danmaku-go-targeted.log` 与 `build/danmaku-baseline-overlay.json`。
 
-本轮开发机仅有 Android platform-tools，缺少 Android SDK、Visual Studio C++ 工作负载和 Xcode。Flutter bundle 构建在 Android SDK 检查阶段失败，未生成新的 Android / Windows / iOS 完整安装包；未启动设备或模拟器，未进行用户真实 API 与实际视频播放的联调。0.2.155 的正式发布状态保持以下历史记录，不能作为 0.2.156 的设备验收结论。
+0.2.156 本机 Flutter bundle 构建在 Android SDK 检查阶段失败；当时开发机仅有 Android platform-tools，缺少 Android SDK、Visual Studio C++ 工作负载和 macOS / Xcode。该轮未生成完整安装包，未启动设备或模拟器，未进行用户真实 API 与实际视频播放联调。0.2.155 的正式发布状态保持以下历史记录，不能作为后续版本的设备验收结论。
 
 0.2.155+2168 已完成首次正式发布：[主工作流](https://github.com/youniube/zhenguo-app/actions/runs/38556613027) 与 [Android 6 工作流](https://github.com/youniube/zhenguo-app/actions/runs/38556612682) 均成功。Dart `lib / test / integration_test / test_driver` 格式检查通过，静态分析无错误和警告，保留 10 条既有 info；红果鉴与真果鉴分别通过播放器导航 / 榜单的 13 项合成数据测试，远程图片请求禁用；两版 Go 核心的站源移除、目录解析及榜单定向检查通过。Python 构建脚本检查本地 20 项通过、2 项因工具或平台条件跳过，Actions Linux 上 22 项全部通过；修复 Windows CRLF 锁文件镜像替换与测试中的系统类型检测 mock。13 个安装包均已下载并完成前述包校验，本地记录位于 `build/formal-release-02155/`，包括 `main-package-verification.json` 与 `android6-package-verification.json`。本轮未启动设备或模拟器，未进行真实站源、媒体播放、视觉及跨设备验收；正式包对应源码提交 `b3a8c7d`。
 

@@ -31,6 +31,9 @@ class PlayerMenu extends StatefulWidget {
     this.preloadStatus = '',
     this.enhancement,
     this.onCompareEnhancement,
+    this.routeIndex = 0,
+    this.routeCount = 0,
+    this.onRoute,
   });
 
   final PlayerMenuSection section;
@@ -48,6 +51,9 @@ class PlayerMenu extends StatefulWidget {
   final String preloadStatus;
   final VideoEnhancementController? enhancement;
   final VoidCallback? onCompareEnhancement;
+  final int routeIndex;
+  final int routeCount;
+  final ValueChanged<int>? onRoute;
   final ValueChanged<int> onEpisode;
   final Future<void> Function(PlaybackPreferences) onPreferences;
   final Future<void> Function() onFavorite;
@@ -186,6 +192,24 @@ class _PlayerMenuState extends State<PlayerMenu> {
           const SizedBox(height: 20),
         ],
         if (all || widget.section == PlayerMenuSection.quality) ...[
+          if (widget.onRoute != null && widget.routeCount > 1) ...[
+            const Text('播放线路'),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                for (var route = 0; route < widget.routeCount; route++)
+                  ChoiceChip(
+                    key: ValueKey('menu-route-$route'),
+                    label: Text('线路 ${route + 1}'),
+                    selected: route == widget.routeIndex,
+                    onSelected: _busy ? null : (_) => widget.onRoute!(route),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 20),
+          ],
           const Text('清晰度'),
           const SizedBox(height: 8),
           Text(

@@ -43,6 +43,10 @@ func (d *Downloader) providerBaseURL(source string) string {
 		configured, fallback = d.cfg.YeguoURL, yeguoBaseURL
 	case sourceDSD:
 		configured, fallback = d.cfg.DSDURL, dsdBaseURL
+	case sourceIkanbot:
+		configured, fallback = d.cfg.IkanbotURL, ikanbotBaseURL
+	case sourceA123:
+		configured, fallback = d.cfg.A123URL, a123BaseURL
 	default:
 		if spec, found := duanjuSourceSpecFor(source); found {
 			return d.duanjuBaseURL(spec.ID)
@@ -76,6 +80,10 @@ func providerSourceForURL(raw string) string {
 		return sourceYeguo
 	case host == "dsd.com.se" || host == "www.dsd.com.se":
 		return sourceDSD
+	case host == "ikanbot.com" || host == "www.ikanbot.com" || host == "www1.ikanbot.com":
+		return sourceIkanbot
+	case host == "a123tv.com" || host == "www.a123tv.com":
+		return sourceA123
 	default:
 		return duanjuSourceForHost(host)
 	}
@@ -141,6 +149,12 @@ func (d *Downloader) resolveProviderMedia(ctx context.Context, task Task) (provi
 	}
 	if chapter.Source == sourceDSD {
 		return d.resolveDSDMedia(ctx, task)
+	}
+	if chapter.Source == sourceIkanbot {
+		return d.resolveIkanbotMedia(ctx, task)
+	}
+	if chapter.Source == sourceA123 {
+		return d.resolveA123Media(ctx, task)
 	}
 	if isDuanjuProviderSource(chapter.Source) {
 		return d.resolveDuanjuMedia(ctx, task)

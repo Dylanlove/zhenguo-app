@@ -248,6 +248,9 @@ func (manager *nativeDownloads) downloadFileAttempt(ctx context.Context, address
 	received := offset
 	buffer := make([]byte, 64<<10)
 	for {
+		if err = requestCtx.Err(); err != nil {
+			break
+		}
 		n, readErr := response.Body.Read(buffer)
 		if n > 0 {
 			if key && received+int64(n) > 64 {

@@ -89,6 +89,33 @@ func TestSourceUpdatesPreservePagesOtherSourcesAndMetadata(t *testing.T) {
 	}
 }
 
+func TestYeguoSourceUpdateStopsAtExhaustedFirstPage(t *testing.T) {
+	var pages []string
+	engine := sourceFixtureEngine(t, func(request *http.Request) (*http.Response, error) {
+		if request.Method != http.MethodPost || request.URL.Path != "/api/theater/exploreList" {
+			t.Fatalf("unexpected catalog request: %s %s", request.Method, request.URL.Path)
+		}
+		if err := request.ParseForm(); err != nil {
+			t.Fatal(err)
+		}
+		pages = append(pages, request.Form.Get("page"))
+		return sourceFixtureResponse(request, http.StatusOK, `{"status":"1","data":{"list":[{"video_id":"9001","title":"合成剧集","description":"完整资料","episode_count":"6"}],"page":1,"limit":20,"total":1,"has_more":"0"}}`), nil
+	})
+	engine.downloader.cfg.MaxPagesPerSort = 3
+	engine.downloader.yeguoClient().access = &yeguoAccess{base: "https://api.yeguo.test", identifier: "fixture-trace", loadedAt: time.Now()}
+	for _, operation := range []string{"update", "more", "update"} {
+		if err := engine.updateSource(context.Background(), sourceYeguo, operation); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if len(pages) != 2 || pages[0] != "1" || pages[1] != "1" {
+		t.Fatal("source update repeated the head or reloaded an exhausted tail", pages)
+	}
+	if cached := engine.nativeCached(sourceYeguo); cached.Page != 1 || cached.HasMore || len(cached.Items) != 1 {
+		t.Fatal("exhausted catalog lost its saved page", cached)
+	}
+}
+
 func TestYeguoSourceUpdateBatchesConfiguredPagesWithPost(t *testing.T) {
 	var pages []string
 	engine := sourceFixtureEngine(t, func(request *http.Request) (*http.Response, error) {

@@ -10,6 +10,7 @@ import (
 )
 
 type nativePlaybackChoice struct {
+	source        string
 	media         []providerMedia
 	index         int
 	qualities     []int
@@ -138,6 +139,20 @@ func (engine *nativeEngine) nativeNextPlayback(ctx context.Context, session stri
 		return nativePlan{}, errors.New("播放线路已失效，请重新解析播放")
 	}
 	choice.index++
+	return engine.nativeOpenPlayback(ctx, choice)
+}
+
+func (engine *nativeEngine) nativeSelectFilmRoute(ctx context.Context, session string, route int) (nativePlan, error) {
+	engine.mu.Lock()
+	choice, exists := engine.playbacks[session]
+	engine.mu.Unlock()
+	if !exists {
+		return nativePlan{}, errors.New("播放线路已失效，请重新解析播放")
+	}
+	if !isFilmProviderSource(choice.source) || !nativeSourceAvailable(choice.source) {
+		return nativePlan{}, errNativeBuildSource
+	}
+	choice.index = route
 	return engine.nativeOpenPlayback(ctx, choice)
 }
 

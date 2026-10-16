@@ -6,6 +6,7 @@ import 'package:media_kit/media_kit.dart';
 
 import 'lan_controller.dart';
 import 'player_chrome.dart';
+import 'player_danmaku_icon.dart';
 import 'player_feedback.dart';
 import 'player_interactions.dart';
 import 'player_rotation_icon.dart';
@@ -972,26 +973,26 @@ class _PlayerControlsState extends State<PlayerControls> {
     );
   }
 
-  Widget _danmakuTool() => _toolButton(
-    key: const ValueKey('player-danmaku-toggle'),
-    tooltip: widget.danmakuStatus.isEmpty
-        ? (widget.danmakuEnabled ? '关闭弹幕' : '打开弹幕')
-        : widget.danmakuStatus,
-    visualWidth: 36,
-    selected: widget.danmakuEnabled,
-    onPressed: widget.enabled ? () => _panel(widget.onDanmaku!) : null,
-    child: Text(
-      '弹',
-      style: TextStyle(
-        fontSize: 14,
-        height: 1,
-        fontWeight: FontWeight.w600,
-        color: widget.danmakuEnabled
-            ? Theme.of(context).colorScheme.primary
-            : Colors.white.withValues(alpha: .86),
+  Widget _danmakuTool() {
+    final action = widget.danmakuEnabled ? '关闭弹幕' : '打开弹幕';
+    return Semantics(
+      toggled: widget.danmakuEnabled,
+      child: IconButton(
+        key: const ValueKey('player-danmaku-toggle'),
+        tooltip: widget.danmakuStatus.isEmpty
+            ? action
+            : '$action · ${widget.danmakuStatus}',
+        constraints: const BoxConstraints.tightFor(width: 48, height: 48),
+        padding: EdgeInsets.zero,
+        color: Colors.white,
+        disabledColor: Colors.white38,
+        onPressed: widget.enabled && widget.onDanmaku != null
+            ? () => _panel(widget.onDanmaku!)
+            : null,
+        icon: PlayerDanmakuIcon(enabled: widget.danmakuEnabled),
       ),
-    ),
-  );
+    );
+  }
 
   Widget _sleepTimerTool() => _toolIcon(
     key: const ValueKey('player-sleep-timer'),

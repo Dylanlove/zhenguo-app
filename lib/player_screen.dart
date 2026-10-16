@@ -1222,6 +1222,7 @@ class _PlayerScreenState extends State<PlayerScreen>
     bool playWhenReady = true,
     PlaybackPlan? handoffPlan,
     bool showControlsOnReady = true,
+    int? route,
   }) async {
     if (_closed ||
         widget.store.profileEpoch != _profileEpoch ||
@@ -1240,7 +1241,10 @@ class _PlayerScreenState extends State<PlayerScreen>
     if (index != _index) _forceOnline = false;
     final warmed =
         handoffPlan ??
-        (recoveryAction == null && _preloadEnabled && !widget.localOnly
+        (recoveryAction == null &&
+                route == null &&
+                _preloadEnabled &&
+                !widget.localOnly
             ? _preloader.take(
                 widget.detail.drama,
                 widget.detail.episodes[index],
@@ -1293,7 +1297,8 @@ class _PlayerScreenState extends State<PlayerScreen>
         await _player.stop();
         final previous = _plan;
         _plan = null;
-        if (recoveryAction == PlaybackRecoveryAction.alternative) {
+        if (recoveryAction == PlaybackRecoveryAction.alternative ||
+            route != null) {
           retained = previous;
         } else if (previous != null) {
           await widget.repository.release(previous.session);
@@ -1303,7 +1308,9 @@ class _PlayerScreenState extends State<PlayerScreen>
         return;
       }
       prepared = retained != null
-          ? await _loader.fallback(retained!)
+          ? route != null
+                ? await _loader.selectRoute(retained!, route)
+                : await _loader.fallback(retained!)
           : warmed != null
           ? await _loader.use(warmed)
           : await _loader.load(
@@ -1606,6 +1613,7 @@ class _PlayerScreenState extends State<PlayerScreen>
     setState(() => _panelOpen = true);
     final menuTheme = _showFullscreen ? AppTheme.dark : Theme.of(context);
     var openDanmaku = false;
+    int? selectedRoute;
     try {
       final index = await showDialog<int>(
         context: context,
@@ -1625,6 +1633,14 @@ class _PlayerScreenState extends State<PlayerScreen>
               preferences: _preferences,
               qualities: _plan?.qualities ?? [],
               actualQuality: _plan?.quality ?? 0,
+              routeIndex: _plan?.routeIndex ?? 0,
+              routeCount: _plan?.routeCount ?? 0,
+              onRoute: _manualRoutesAvailable
+                  ? (route) {
+                      selectedRoute = route;
+                      Navigator.pop(menuContext);
+                    }
+                  : null,
               local: _plan?.local == true,
               favorite: widget.store.isFavorite(widget.detail.drama.id),
               mobile: _mobile,
@@ -1657,7 +1673,32 @@ class _PlayerScreenState extends State<PlayerScreen>
         _playerFocus.requestFocus();
       }
     }
+    if (selectedRoute != null && mounted && !_closed) {
+      await _changeRoute(selectedRoute!);
+    }
     if (openDanmaku && mounted && !_closed) await _showDanmakuSettings();
+  }
+
+  bool get _manualRoutesAvailable =>
+      SourceSite.byId(widget.detail.drama.source).filmSource &&
+      _plan != null &&
+      !_plan!.local &&
+      _plan!.routeCount > 1;
+
+  Future<void> _changeRoute(int route) async {
+    if (!_manualRoutesAvailable ||
+        route == _plan!.routeIndex && _error == null ||
+        _loading) {
+      return;
+    }
+    await _play(
+      _index,
+      position: _error != null
+          ? _resumePosition
+          : _player.state.position.inMilliseconds / 1000,
+      playWhenReady: _error != null ? _playIntent : _player.state.playing,
+      route: route,
+    );
   }
 
   Future<void> _seekTo(Duration target) async {
@@ -1720,6 +1761,7 @@ class _PlayerScreenState extends State<PlayerScreen>
     setState(() => _panelOpen = true);
     TelevisionPlaybackSetting? selection;
     var openDanmaku = false;
+    int? selectedRoute;
     try {
       selection = await showDialog<TelevisionPlaybackSetting>(
         context: context,
@@ -1730,6 +1772,14 @@ class _PlayerScreenState extends State<PlayerScreen>
             child: TelevisionSettingsDialog(
               speed: _speed,
               quality: _requestedQuality,
+              routeIndex: _plan?.routeIndex ?? 0,
+              routeCount: _plan?.routeCount ?? 0,
+              onRoute: _manualRoutesAvailable
+                  ? (route) {
+                      selectedRoute = route;
+                      Navigator.pop(menuContext);
+                    }
+                  : null,
               qualities: _plan?.qualities ?? [],
               favorite: widget.store.isFavorite(widget.detail.drama.id),
               onFavorite: _toggleFavorite,
@@ -1756,6 +1806,10 @@ class _PlayerScreenState extends State<PlayerScreen>
     }
     if (openDanmaku && mounted && !_closed) {
       await _showDanmakuSettings();
+      return;
+    }
+    if (selectedRoute != null && mounted && !_closed) {
+      await _changeRoute(selectedRoute!);
       return;
     }
     if (selection == null || !mounted || _closed) return;
@@ -2126,7 +2180,34 @@ class _PlayerScreenState extends State<PlayerScreen>
                     message: _error!,
                     onRetry: () => _retry(),
                     action: _localFailure ? '重试本地播放' : '重试播放',
-                    secondaryAction: widget.mediaId == null
+                    secondaryAction: _manualRoutesAvailable
+                        ? Wrap(
+                            alignment: WrapAlignment.center,
+                            children: [
+                              TextButton.icon(
+                                key: const ValueKey('player-error-routes'),
+                                onPressed: () => _television
+                                    ? _televisionSettings(context)
+                                    : _openPanel(PlayerMenuSection.quality),
+                                icon: const Icon(Icons.alt_route_rounded),
+                                label: const Text('选择播放线路'),
+                              ),
+                              if (widget.mediaId == null)
+                                TextButton.icon(
+                                  onPressed: () => showCrossSourceSearch(
+                                    context,
+                                    drama: widget.detail.drama,
+                                    repository: widget.repository,
+                                    store: widget.store,
+                                  ),
+                                  icon: const Icon(
+                                    Icons.travel_explore_rounded,
+                                  ),
+                                  label: const Text('其他站源'),
+                                ),
+                            ],
+                          )
+                        : widget.mediaId == null
                         ? Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [

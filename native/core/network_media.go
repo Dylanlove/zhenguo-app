@@ -247,13 +247,13 @@ func insecureTLSRoundTripper(roundTripper http.RoundTripper) (http.RoundTripper,
 		if !ok {
 			return nil, false
 		}
-		clone := *transport
-		clone.base = base
-		clone.insecure = true
-		clone.mu = sync.Mutex{}
-		clone.clients = make(map[string]browserHTTPClient)
+		clone := &huangguoBrowserTransport{
+			base: base, router: transport.router, hosts: transport.hosts,
+			insecure: true, record: transport.record,
+			clients: make(map[string]browserHTTPClient),
+		}
 		clone.newClient = clone.createClient
-		return &clone, true
+		return clone, true
 	case *cdnTransport:
 		base, ok := insecureTLSRoundTripper(transport.base)
 		if !ok {
