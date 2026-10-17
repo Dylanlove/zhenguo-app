@@ -1639,7 +1639,7 @@ class _PlayerScreenState extends State<PlayerScreen>
       final keywords = await showDialog<List<String>>(
         context: context,
         builder: (_) => Theme(
-          data: AppTheme.dark,
+          data: Theme.of(context),
           child: DanmakuKeywordsDialog(
             keywords: widget.store.playbackPreferences.danmakuSettings.keywords,
           ),
@@ -1678,7 +1678,9 @@ class _PlayerScreenState extends State<PlayerScreen>
       await showDialog<void>(
         context: context,
         builder: (_) => Theme(
-          data: _television ? televisionTheme(AppTheme.dark) : AppTheme.dark,
+          data: _television
+              ? televisionTheme(Theme.of(context))
+              : Theme.of(context),
           child: DanmakuSettingsPanel(
             store: widget.store,
             controller: _danmaku,

@@ -7,6 +7,7 @@ import 'danmaku_api.dart';
 import 'danmaku_controller.dart';
 import 'danmaku_models.dart';
 import 'danmaku_preferences.dart';
+import 'glass_panel.dart';
 import 'local_store.dart';
 
 String danmakuSettingsSummary(LocalStore store) {
@@ -140,76 +141,83 @@ class _DanmakuSettingsPanelState extends State<DanmakuSettingsPanel> {
     final panel = Dialog(
       alignment: landscape ? Alignment.centerRight : Alignment.bottomCenter,
       insetPadding: const EdgeInsets.all(12),
-      clipBehavior: Clip.antiAlias,
+      elevation: 0,
+      backgroundColor: Colors.transparent,
+      surfaceTintColor: Colors.transparent,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-      child: SizedBox(
-        width: widget.television
-            ? 680
-            : landscape
-            ? 440
-            : 620,
-        height: math.min(
-          820,
-          size.height - MediaQuery.paddingOf(context).vertical - 24,
-        ),
-        child: DefaultTabController(
-          length: 3,
-          initialIndex: widget.initialTab.index,
-          child: FocusTraversalGroup(
-            child: Column(
-              children: [
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 12, 8, 4),
-                  child: Row(
-                    children: [
-                      Icon(Icons.subtitles_outlined, color: colors.primary),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Text(
-                          '弹幕设置',
-                          style: Theme.of(context).textTheme.titleLarge,
+      child: GlassPanel.dialog(
+        child: SizedBox(
+          width: widget.television
+              ? 680
+              : landscape
+              ? 440
+              : 620,
+          height: math.min(
+            820,
+            size.height - MediaQuery.paddingOf(context).vertical - 24,
+          ),
+          child: DefaultTabController(
+            length: 3,
+            initialIndex: widget.initialTab.index,
+            child: FocusTraversalGroup(
+              child: Column(
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 12, 8, 4),
+                    child: Row(
+                      children: [
+                        Icon(Icons.subtitles_outlined, color: colors.primary),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            '弹幕设置',
+                            style: Theme.of(context).textTheme.titleLarge,
+                          ),
                         ),
-                      ),
-                      AnimatedBuilder(
-                        animation: widget.store,
-                        builder: (_, _) => Switch.adaptive(
-                          key: const ValueKey('danmaku-panel-enabled'),
-                          value: widget.store.playbackPreferences.danmaku,
-                          onChanged: _allowed ? _toggle : null,
+                        AnimatedBuilder(
+                          animation: widget.store,
+                          builder: (_, _) => Switch.adaptive(
+                            key: const ValueKey('danmaku-panel-enabled'),
+                            value: widget.store.playbackPreferences.danmaku,
+                            onChanged: _allowed ? _toggle : null,
+                          ),
                         ),
-                      ),
-                      IconButton(
-                        autofocus: widget.television,
-                        tooltip: '关闭弹幕设置',
-                        icon: const Icon(Icons.close_rounded),
-                        onPressed: () async {
-                          await _writes.catchError((Object _) {});
-                          if (context.mounted) Navigator.pop(context);
-                        },
-                      ),
+                        IconButton(
+                          autofocus: widget.television,
+                          tooltip: '关闭弹幕设置',
+                          icon: const Icon(Icons.close_rounded),
+                          onPressed: () async {
+                            await _writes.catchError((Object _) {});
+                            if (context.mounted) Navigator.pop(context);
+                          },
+                        ),
+                      ],
+                    ),
+                  ),
+                  const TabBar(
+                    tabs: [
+                      Tab(text: '数据源'),
+                      Tab(text: '显示'),
+                      Tab(text: '高级'),
                     ],
                   ),
-                ),
-                const TabBar(
-                  tabs: [
-                    Tab(text: '数据源'),
-                    Tab(text: '显示'),
-                    Tab(text: '高级'),
-                  ],
-                ),
-                if (_error != null)
-                  Padding(
-                    padding: const EdgeInsets.all(12),
-                    child: Text(_error!, style: TextStyle(color: colors.error)),
+                  if (_error != null)
+                    Padding(
+                      padding: const EdgeInsets.all(12),
+                      child: Text(
+                        _error!,
+                        style: TextStyle(color: colors.error),
+                      ),
+                    ),
+                  Expanded(
+                    child: !_allowed
+                        ? const Center(child: Text('当前用户已变更，请重新打开设置'))
+                        : TabBarView(
+                            children: [_sources(), _display(), _advanced()],
+                          ),
                   ),
-                Expanded(
-                  child: !_allowed
-                      ? const Center(child: Text('当前用户已变更，请重新打开设置'))
-                      : TabBarView(
-                          children: [_sources(), _display(), _advanced()],
-                        ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ),
@@ -237,7 +245,6 @@ class _DanmakuSettingsPanelState extends State<DanmakuSettingsPanel> {
   Widget _card(Widget child) => Card(
     margin: const EdgeInsets.only(bottom: 12),
     elevation: 0,
-    color: Theme.of(context).colorScheme.surfaceContainerHigh,
     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
     child: child,
   );
@@ -424,7 +431,7 @@ class _DanmakuSettingsPanelState extends State<DanmakuSettingsPanel> {
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(16),
           gradient: const LinearGradient(
-            colors: [Color(0xff26394b), Color(0xff10171e)],
+            colors: [Color(0x9926394b), Color(0x9910171e)],
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
           ),
@@ -698,7 +705,7 @@ class _DanmakuKeywordsDialogState extends State<DanmakuKeywordsDialog> {
   late final _input = TextEditingController(text: widget.keywords.join('\n'));
 
   @override
-  Widget build(BuildContext context) => AlertDialog(
+  Widget build(BuildContext context) => GlassAlertDialog(
     title: const Text('屏蔽关键词'),
     content: SizedBox(
       width: 400,
@@ -825,8 +832,49 @@ class _DanmakuSourcesDialogState extends State<_DanmakuSourcesDialog> {
     );
   }
 
+  Future<void> _openSourceActions(
+    BuildContext menuContext,
+    DanmakuSource source,
+  ) async {
+    final anchor = glassMenuAnchor(menuContext);
+    if (anchor == null) return;
+    final action = await showGlassMenu<_SourceAction>(
+      context: menuContext,
+      anchor: anchor,
+      alignRight: true,
+      entries: const [
+        GlassMenuEntry(
+          value: _SourceAction.probe,
+          label: Text('检测连接'),
+          trailing: Icon(Icons.network_check_rounded),
+        ),
+        GlassMenuEntry(
+          value: _SourceAction.edit,
+          label: Text('编辑 API'),
+          trailing: Icon(Icons.edit_outlined),
+        ),
+        GlassMenuEntry(
+          value: _SourceAction.delete,
+          label: Text('删除 API'),
+          trailing: Icon(Icons.delete_outline_rounded),
+        ),
+      ],
+    );
+    if (!mounted) return;
+    switch (action) {
+      case _SourceAction.probe:
+        await _probe(source);
+      case _SourceAction.edit:
+        await _edit(source);
+      case _SourceAction.delete:
+        _delete(source);
+      case null:
+        break;
+    }
+  }
+
   @override
-  Widget build(BuildContext context) => AlertDialog(
+  Widget build(BuildContext context) => GlassAlertDialog(
     title: const Text('弹幕 API 管理'),
     content: SizedBox(
       width: 520,
@@ -862,32 +910,13 @@ class _DanmakuSourcesDialogState extends State<_DanmakuSourcesDialog> {
                           onTap: () => _save(
                             _settings.copyWith(defaultSourceId: source.id),
                           ),
-                          trailing: PopupMenuButton<_SourceAction>(
-                            tooltip: '管理 ${source.name}',
-                            onSelected: (action) {
-                              switch (action) {
-                                case _SourceAction.probe:
-                                  unawaited(_probe(source));
-                                case _SourceAction.edit:
-                                  unawaited(_edit(source));
-                                case _SourceAction.delete:
-                                  _delete(source);
-                              }
-                            },
-                            itemBuilder: (_) => const [
-                              PopupMenuItem(
-                                value: _SourceAction.probe,
-                                child: Text('检测连接'),
-                              ),
-                              PopupMenuItem(
-                                value: _SourceAction.edit,
-                                child: Text('编辑 API'),
-                              ),
-                              PopupMenuItem(
-                                value: _SourceAction.delete,
-                                child: Text('删除 API'),
-                              ),
-                            ],
+                          trailing: Builder(
+                            builder: (menuContext) => IconButton(
+                              tooltip: '管理 ${source.name}',
+                              icon: const Icon(Icons.more_vert_rounded),
+                              onPressed: () =>
+                                  _openSourceActions(menuContext, source),
+                            ),
                           ),
                         ),
                         if (source.id == _settings.defaultSourceId)
@@ -946,7 +975,7 @@ class _DanmakuSourceEditorState extends State<_DanmakuSourceEditor> {
   late final _name = TextEditingController(text: widget.source?.name ?? '我的弹幕');
   late final _url = TextEditingController(text: widget.source?.baseUrl ?? '');
   @override
-  Widget build(BuildContext context) => AlertDialog(
+  Widget build(BuildContext context) => GlassAlertDialog(
     title: Text(widget.source == null ? '添加弹幕 API' : '编辑弹幕 API'),
     content: SizedBox(
       width: 460,
@@ -1092,7 +1121,7 @@ class _DanmakuSearchDialogState extends State<_DanmakuSearchDialog> {
       });
   });
   @override
-  Widget build(BuildContext context) => AlertDialog(
+  Widget build(BuildContext context) => GlassAlertDialog(
     title: Text(_show?.title ?? '手动匹配弹幕'),
     content: SizedBox(
       width: 540,
