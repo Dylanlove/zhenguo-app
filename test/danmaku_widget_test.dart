@@ -13,6 +13,7 @@ import 'package:duanju_app/local_store.dart';
 import 'package:duanju_app/local_profiles.dart';
 import 'package:duanju_app/models.dart';
 import 'package:duanju_app/playback_preferences.dart';
+import 'package:duanju_app/player_danmaku_icon.dart';
 import 'package:duanju_app/player_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
@@ -550,13 +551,22 @@ void main() {
     },
   );
 
-  for (final platform in [TargetPlatform.android, TargetPlatform.iOS]) {
+  for (final platform in [
+    TargetPlatform.android,
+    TargetPlatform.iOS,
+    TargetPlatform.windows,
+  ]) {
     testWidgets(
-      '$platform playback, episode switch, quick hide and settings stay independent of API failures',
+      '$platform danmaku menu preserves playback and only changes enabled state on selection',
       (tester) async {
         debugDefaultTargetPlatformOverride = platform;
         try {
-          size(tester, const Size(420, 880));
+          size(
+            tester,
+            platform == TargetPlatform.windows
+                ? const Size(1100, 720)
+                : const Size(420, 880),
+          );
           final local = await store(),
               repository = RouteRepository(),
               scripted = ScriptedPlayer();
@@ -593,15 +603,115 @@ void main() {
           await settle(tester);
           expect(scripted.state.playing, isTrue);
           expect(repository.fallbackCalls, 0);
-          await tester.tap(find.byKey(const ValueKey('player-danmaku-toggle')));
+          final menu = find.byKey(const ValueKey('player-danmaku-menu'));
+          expect(
+            find.byKey(const ValueKey('player-danmaku-settings')),
+            findsNothing,
+          );
+          await tester.tap(menu);
+          await settle(tester);
+          expect(local.playbackPreferences.danmaku, isTrue);
+          expect(find.text('关闭弹幕'), findsOneWidget);
+          expect(find.text('开启弹幕'), findsNothing);
+          expect(scripted.state.playing, isTrue);
+          final loads = service.loads.length;
+          await tester.tapAt(const Offset(8, 8));
+          await settle(tester);
+          expect(find.text('关闭弹幕'), findsNothing);
+          expect(local.playbackPreferences.danmaku, isTrue);
+          expect(service.loads.length, loads);
+
+          await tester.tap(menu);
+          await settle(tester);
+          await tester.tap(
+            find.byKey(const ValueKey('player-danmaku-disable')),
+          );
           await settle(tester);
           expect(local.playbackPreferences.danmaku, isFalse);
+          expect(
+            tester
+                .widget<PlayerDanmakuIcon>(find.byType(PlayerDanmakuIcon))
+                .enabled,
+            isFalse,
+          );
           expect(scripted.state.playing, isTrue);
+          await tester.tap(menu);
+          await settle(tester);
+          expect(find.text('开启弹幕'), findsOneWidget);
+          expect(find.text('关闭弹幕'), findsNothing);
           await tester.tap(
-            find.byKey(const ValueKey('player-danmaku-settings')),
+            find.byKey(const ValueKey('player-danmaku-display')),
           );
           await settle(tester);
           expect(find.byType(DanmakuSettingsPanel), findsOneWidget);
+          final panelTabs = find.descendant(
+            of: find.byType(DanmakuSettingsPanel),
+            matching: find.byType(TabBar),
+          );
+          expect(
+            DefaultTabController.of(tester.element(panelTabs)).index,
+            DanmakuSettingsTab.display.index,
+          );
+          expect(local.playbackPreferences.danmaku, isFalse);
+          await tester.tap(find.byTooltip('关闭弹幕设置'));
+          await settle(tester);
+
+          await tester.tap(menu);
+          await settle(tester);
+          await tester.tap(
+            find.byKey(const ValueKey('player-danmaku-keywords')),
+          );
+          await settle(tester);
+          final keywords = find.byKey(const ValueKey('danmaku-keywords-input'));
+          final originalKeywords =
+              local.playbackPreferences.danmakuSettings.keywords;
+          await tester.enterText(keywords, '不保存的关键词');
+          await tester.tap(find.text('取消'));
+          await settle(tester);
+          expect(
+            local.playbackPreferences.danmakuSettings.keywords,
+            originalKeywords,
+          );
+          await tester.tap(menu);
+          await settle(tester);
+          await tester.tap(
+            find.byKey(const ValueKey('player-danmaku-keywords')),
+          );
+          await settle(tester);
+          await tester.enterText(keywords, '  屏蔽词  \n\n屏蔽词\n另一个关键词');
+          await tester.tap(find.text('保存'));
+          await settle(tester);
+          expect(local.playbackPreferences.danmakuSettings.keywords, [
+            '屏蔽词',
+            '另一个关键词',
+          ]);
+          expect(local.playbackPreferences.danmaku, isFalse);
+
+          await tester.tap(menu);
+          await settle(tester);
+          await tester.tap(
+            find.byKey(const ValueKey('player-danmaku-sources')),
+          );
+          await settle(tester);
+          expect(
+            DefaultTabController.of(tester.element(panelTabs)).index,
+            DanmakuSettingsTab.sources.index,
+          );
+          await tester.tap(find.byTooltip('关闭弹幕设置'));
+          await settle(tester);
+
+          await tester.tap(menu);
+          await settle(tester);
+          await tester.tap(find.byKey(const ValueKey('player-danmaku-enable')));
+          await settle(tester);
+          expect(local.playbackPreferences.danmaku, isTrue);
+          expect(
+            tester
+                .widget<PlayerDanmakuIcon>(find.byType(PlayerDanmakuIcon))
+                .enabled,
+            isTrue,
+          );
+          expect(scripted.state.playing, isTrue);
           expect(scripted.opened.length, 2);
           await tester.pumpWidget(const SizedBox.shrink());
           await settle(tester);

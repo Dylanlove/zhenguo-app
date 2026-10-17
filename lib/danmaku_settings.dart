@@ -16,6 +16,8 @@ String danmakuSettingsSummary(LocalStore store) {
   return source == null ? '$status · 点击配置数据源' : '$status · 数据源：${source.name}';
 }
 
+enum DanmakuSettingsTab { sources, display, advanced }
+
 class DanmakuSettingsPanel extends StatefulWidget {
   const DanmakuSettingsPanel({
     super.key,
@@ -23,11 +25,13 @@ class DanmakuSettingsPanel extends StatefulWidget {
     this.controller,
     this.television = false,
     this.apiClient,
+    this.initialTab = DanmakuSettingsTab.sources,
   });
   final LocalStore store;
   final DanmakuController? controller;
   final bool television;
   final DanmakuService? apiClient;
+  final DanmakuSettingsTab initialTab;
   @override
   State<DanmakuSettingsPanel> createState() => _DanmakuSettingsPanelState();
 }
@@ -150,6 +154,7 @@ class _DanmakuSettingsPanelState extends State<DanmakuSettingsPanel> {
         ),
         child: DefaultTabController(
           length: 3,
+          initialIndex: widget.initialTab.index,
           child: FocusTraversalGroup(
             child: Column(
               children: [
@@ -665,38 +670,56 @@ class _DanmakuSettingsPanelState extends State<DanmakuSettingsPanel> {
   ]);
 
   Future<void> _editKeywords() async {
-    final input = TextEditingController(text: _settings.keywords.join('\n'));
-    final result = await showDialog<String>(
+    final result = await showDialog<List<String>>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('屏蔽关键词'),
-        content: SizedBox(
-          width: 400,
-          child: TextField(
-            controller: input,
-            minLines: 3,
-            maxLines: 8,
-            maxLength: 6000,
-            decoration: const InputDecoration(hintText: '每行一个，最多 100 个关键词'),
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('取消'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, input.text),
-            child: const Text('保存'),
-          ),
-        ],
-      ),
+      builder: (_) => DanmakuKeywordsDialog(keywords: _settings.keywords),
     );
-    input.dispose();
     if (result != null && mounted && _allowed)
-      await _save(
-        _settings.copyWith(
-          keywords: result
+      await _save(_settings.copyWith(keywords: result));
+  }
+
+  @override
+  void dispose() {
+    if (widget.apiClient == null) _client.dispose();
+    super.dispose();
+  }
+}
+
+class DanmakuKeywordsDialog extends StatefulWidget {
+  const DanmakuKeywordsDialog({super.key, required this.keywords});
+
+  final List<String> keywords;
+
+  @override
+  State<DanmakuKeywordsDialog> createState() => _DanmakuKeywordsDialogState();
+}
+
+class _DanmakuKeywordsDialogState extends State<DanmakuKeywordsDialog> {
+  late final _input = TextEditingController(text: widget.keywords.join('\n'));
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+    title: const Text('屏蔽关键词'),
+    content: SizedBox(
+      width: 400,
+      child: TextField(
+        key: const ValueKey('danmaku-keywords-input'),
+        controller: _input,
+        minLines: 3,
+        maxLines: 8,
+        maxLength: 6000,
+        decoration: const InputDecoration(hintText: '每行一个，最多 100 个关键词'),
+      ),
+    ),
+    actions: [
+      TextButton(
+        onPressed: () => Navigator.pop(context),
+        child: const Text('取消'),
+      ),
+      FilledButton(
+        onPressed: () => Navigator.pop(
+          context,
+          _input.text
               .split(RegExp(r'[\n\r]+'))
               .map((word) => trimDanmakuText(word.trim(), 60))
               .where((word) => word.isNotEmpty)
@@ -704,12 +727,14 @@ class _DanmakuSettingsPanelState extends State<DanmakuSettingsPanel> {
               .take(100)
               .toList(),
         ),
-      );
-  }
+        child: const Text('保存'),
+      ),
+    ],
+  );
 
   @override
   void dispose() {
-    if (widget.apiClient == null) _client.dispose();
+    _input.dispose();
     super.dispose();
   }
 }

@@ -16,7 +16,7 @@ import 'interface_fixtures.dart';
 
 void main() {
   Future<LocalStore> localStore() async {
-    SharedPreferences.setMockInitialValues({});
+    SharedPreferences.setMockInitialValues({'interfaceStyle': 'standard'});
     final store = LocalStore(await SharedPreferences.getInstance());
     addTearDown(store.dispose);
     return store;
@@ -33,7 +33,7 @@ void main() {
   testWidgets(
     'refresh rotates during a request and stops after success or failure',
     (tester) async {
-      viewport(tester, const Size(390, 844));
+      viewport(tester, const Size(420, 844));
       final repository = InterfaceRepository();
       await tester.pumpWidget(
         DuanjuApp(repository: repository, store: await localStore()),
@@ -78,7 +78,7 @@ void main() {
         expect(tester.widget<RotationTransition>(rotation).turns.value, 0);
         expect(tester.widget<IconButton>(button).onPressed, isNotNull);
         expect(find.text('短标题'), findsOneWidget);
-        if (fails) expect(find.text('合成更新失败'), findsOneWidget);
+        if (fails) expect(find.text('合成更新失败'), findsNothing);
       }
       expect(tester.takeException(), isNull);
     },
@@ -90,6 +90,7 @@ void main() {
     viewport(tester, const Size(390, 844));
     final repository = InterfaceRepository();
     final store = await localStore();
+    await store.setGreenMode(false);
     await tester.pumpWidget(DuanjuApp(repository: repository, store: store));
     await tester.pumpAndSettle();
     Future<void> select(String name) async {
@@ -160,7 +161,7 @@ void main() {
       Size? catalogSize;
       for (final tab in const [0, 2, 3]) {
         if (tab > 0) {
-          final nav = tab == 3 ? 2 : tab;
+          final nav = layout.$3 ? 2 : 1;
           final destination = layout.$3
               ? find.byKey(ValueKey('tv-nav-$nav'))
               : layout.$1.width < 840

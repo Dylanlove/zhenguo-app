@@ -70,8 +70,7 @@ class PlayerControls extends StatefulWidget {
     this.swipeEnabled = false,
     this.panelOpen = false,
     this.onSeek,
-    this.onDanmaku,
-    this.onDanmakuSettings,
+    this.onDanmakuMenu,
     this.onPush,
     this.onPictureInPicture,
     this.onRotate,
@@ -126,8 +125,7 @@ class PlayerControls extends StatefulWidget {
   final bool swipeEnabled;
   final bool panelOpen;
   final Future<void> Function(Duration)? onSeek;
-  final Future<void> Function()? onDanmaku;
-  final Future<void> Function()? onDanmakuSettings;
+  final Future<void> Function(BuildContext)? onDanmakuMenu;
   final Future<void> Function()? onPush;
   final Future<void> Function()? onPictureInPicture;
   final VideoEnhancementController? enhancement;
@@ -966,50 +964,27 @@ class _PlayerControlsState extends State<PlayerControls> {
   }
 
   Widget _danmakuTool() {
-    final action = widget.danmakuEnabled ? '关闭弹幕' : '打开弹幕';
-    return Semantics(
-      toggled: widget.danmakuEnabled,
-      child: IconButton(
-        key: const ValueKey('player-danmaku-toggle'),
-        tooltip: widget.danmakuStatus.isEmpty
-            ? action
-            : '$action · ${widget.danmakuStatus}',
-        constraints: const BoxConstraints.tightFor(width: 48, height: 48),
-        padding: EdgeInsets.zero,
-        color: Colors.white,
-        disabledColor: Colors.white38,
-        onPressed: widget.enabled && widget.onDanmaku != null
-            ? () => _panel(widget.onDanmaku!)
-            : null,
-        icon: PlayerDanmakuIcon(enabled: widget.danmakuEnabled),
+    final status = widget.danmakuEnabled ? '已开启' : '已关闭';
+    return Builder(
+      builder: (buttonContext) => Semantics(
+        toggled: widget.danmakuEnabled,
+        child: IconButton(
+          key: const ValueKey('player-danmaku-menu'),
+          tooltip: widget.danmakuStatus.isEmpty
+              ? '弹幕设置 · $status'
+              : '弹幕设置 · $status · ${widget.danmakuStatus}',
+          constraints: const BoxConstraints.tightFor(width: 48, height: 48),
+          padding: EdgeInsets.zero,
+          color: Colors.white,
+          disabledColor: Colors.white38,
+          onPressed: widget.enabled && widget.onDanmakuMenu != null
+              ? () => _panel(() => widget.onDanmakuMenu!(buttonContext))
+              : null,
+          icon: PlayerDanmakuIcon(enabled: widget.danmakuEnabled),
+        ),
       ),
     );
   }
-
-  bool get _hasDanmakuSettings =>
-      widget.showDanmaku && widget.onDanmakuSettings != null;
-
-  double get _danmakuSettingsWidth =>
-      MediaQuery.textScalerOf(context).scale(13) * 4 + 48;
-
-  Widget _danmakuSettingsTool() => SizedBox(
-    width: _danmakuSettingsWidth,
-    child: TextButton.icon(
-      key: const ValueKey('player-danmaku-settings'),
-      style: TextButton.styleFrom(
-        foregroundColor: Colors.white,
-        backgroundColor: Colors.black.withValues(alpha: .36),
-        side: BorderSide(color: Colors.white.withValues(alpha: .12)),
-        minimumSize: const Size(48, 44),
-        visualDensity: VisualDensity.standard,
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-        textStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
-      ),
-      onPressed: () => _panel(widget.onDanmakuSettings!),
-      icon: const Icon(Icons.settings_outlined, size: 18),
-      label: const Text('弹幕设置'),
-    ),
-  );
 
   Widget _sleepTimerTool() => _toolIcon(
     key: const ValueKey('player-sleep-timer'),
@@ -1038,7 +1013,6 @@ class _PlayerControlsState extends State<PlayerControls> {
     required double volume,
   }) {
     final tools = [
-      if (_hasDanmakuSettings) _danmakuSettingsTool(),
       if (widget.onSleepTimer != null) _sleepTimerTool(),
       if (widget.onCatchup != null) _catchupTool(),
       if (showSpeedQuality) ...[
@@ -1101,7 +1075,6 @@ class _PlayerControlsState extends State<PlayerControls> {
         tools,
         compact: compact,
         toolsWidth:
-            (_hasDanmakuSettings ? _danmakuSettingsWidth : 0) +
             (showSpeedQuality ? 118 : 0) +
             48.0 *
                 ((widget.onSleepTimer != null ? 1 : 0) +
@@ -1120,7 +1093,6 @@ class _PlayerControlsState extends State<PlayerControls> {
 
   Widget _mobileControlRow({required bool fullscreen, required bool compact}) {
     final tools = [
-      if (_hasDanmakuSettings) _danmakuSettingsTool(),
       if (widget.onSleepTimer != null) _sleepTimerTool(),
       if (widget.onCatchup != null) _catchupTool(),
       _toolText(
@@ -1162,7 +1134,6 @@ class _PlayerControlsState extends State<PlayerControls> {
         tools,
         compact: compact,
         toolsWidth:
-            (_hasDanmakuSettings ? _danmakuSettingsWidth : 0) +
             118 +
             48.0 *
                 ((widget.onSleepTimer != null ? 1 : 0) +
@@ -1186,7 +1157,7 @@ class _PlayerControlsState extends State<PlayerControls> {
         widget.episodeCount == null) {
       return _clusteredToolRow(tools);
     }
-    if (compact && _hasDanmakuSettings) {
+    if (compact) {
       return Row(
         children: [
           SizedBox(width: 80, child: _episodeCounter()),

@@ -37,7 +37,6 @@ import 'player_controls.dart';
 import 'player_interactions.dart';
 import 'player_menu.dart';
 import 'player_rotation_icon.dart';
-import 'recommendation_service.dart';
 import 'screen_awake.dart';
 import 'search_cache.dart';
 import 'television_controls.dart';
@@ -49,6 +48,8 @@ import 'video_enhancement.dart';
 import 'video_output_size.dart';
 import 'sleep_timer.dart';
 import 'watch_session.dart';
+
+enum _DanmakuMenuAction { sources, display, keywords, enable, disable }
 
 class PlayerScreen extends StatefulWidget {
   const PlayerScreen({
@@ -1186,7 +1187,6 @@ class _PlayerScreenState extends State<PlayerScreen>
           watchSeconds: sample.seconds,
           completedEpisodes: sample.episodes,
         );
-        RecommendationService.current?.observe(entry);
         if (flush) LanController.current?.flush();
       } else {
         await store.saveMediaWatch(
@@ -1544,16 +1544,158 @@ class _PlayerScreenState extends State<PlayerScreen>
     }
   }
 
-  Future<void> _toggleDanmaku() async {
-    if (!_supportsDanmaku) return;
+  Future<void> _toggleDanmaku() => _setDanmakuEnabled(!_danmakuEnabled);
+
+  Future<void> _setDanmakuEnabled(bool enabled) async {
+    if (!_supportsDanmaku || _closed || widget.store.locked) return;
     try {
-      await _setPreferences(_preferences.copyWith(danmaku: !_danmakuEnabled));
+      await _setPreferences(_preferences.copyWith(danmaku: enabled));
     } catch (_) {
       _notice('弹幕偏好未能保存，请重试');
     }
   }
 
-  Future<void> _showDanmakuSettings() async {
+  PopupMenuItem<_DanmakuMenuAction> _danmakuMenuItem(
+    _DanmakuMenuAction action,
+    String label,
+    IconData icon,
+  ) => PopupMenuItem(
+    key: ValueKey('player-danmaku-${action.name}'),
+    value: action,
+    height: 52,
+    child: Row(
+      children: [
+        Expanded(child: Text(label)),
+        const SizedBox(width: 24),
+        Icon(icon, size: 21),
+      ],
+    ),
+  );
+
+  Future<void> _showDanmakuMenu(BuildContext buttonContext) async {
+    if (_panelOpen || _closed || !_supportsDanmaku) return;
+    final button = buttonContext.findRenderObject()! as RenderBox;
+    final overlay =
+        Navigator.of(
+              buttonContext,
+              rootNavigator: true,
+            ).overlay!.context.findRenderObject()!
+            as RenderBox;
+    final position = RelativeRect.fromRect(
+      button.localToGlobal(Offset.zero, ancestor: overlay) & button.size,
+      Offset.zero & overlay.size,
+    );
+    _interactions.cancel();
+    setState(() => _panelOpen = true);
+    _DanmakuMenuAction? action;
+    try {
+      action = await showMenu<_DanmakuMenuAction>(
+        context: buttonContext,
+        useRootNavigator: true,
+        position: position,
+        semanticLabel: '弹幕菜单',
+        color: const Color(0xF22C2C2E),
+        surfaceTintColor: Colors.transparent,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        constraints: const BoxConstraints(minWidth: 240, maxWidth: 300),
+        menuPadding: const EdgeInsets.symmetric(vertical: 4),
+        items: [
+          _danmakuMenuItem(
+            _DanmakuMenuAction.sources,
+            '数据源设置',
+            Icons.dns_outlined,
+          ),
+          const PopupMenuDivider(height: 1),
+          _danmakuMenuItem(
+            _DanmakuMenuAction.display,
+            '显示设置',
+            Icons.settings_outlined,
+          ),
+          const PopupMenuDivider(height: 1),
+          _danmakuMenuItem(
+            _DanmakuMenuAction.keywords,
+            '过滤关键词',
+            Icons.filter_alt_outlined,
+          ),
+          const PopupMenuDivider(height: 1),
+          _danmakuMenuItem(
+            _danmakuEnabled
+                ? _DanmakuMenuAction.disable
+                : _DanmakuMenuAction.enable,
+            _danmakuEnabled ? '关闭弹幕' : '开启弹幕',
+            _danmakuEnabled
+                ? Icons.highlight_off_rounded
+                : Icons.check_circle_outline_rounded,
+          ),
+        ],
+      );
+    } finally {
+      if (mounted && !_closed) {
+        setState(() => _panelOpen = false);
+        _playerFocus.requestFocus();
+      }
+    }
+    if (!mounted ||
+        _closed ||
+        widget.store.locked ||
+        widget.store.profileEpoch != _profileEpoch)
+      return;
+    switch (action) {
+      case _DanmakuMenuAction.sources:
+        await _showDanmakuSettings();
+      case _DanmakuMenuAction.display:
+        await _showDanmakuSettings(initialTab: DanmakuSettingsTab.display);
+      case _DanmakuMenuAction.keywords:
+        await _editDanmakuKeywords();
+      case _DanmakuMenuAction.enable:
+        await _setDanmakuEnabled(true);
+      case _DanmakuMenuAction.disable:
+        await _setDanmakuEnabled(false);
+      case null:
+        break;
+    }
+  }
+
+  Future<void> _editDanmakuKeywords() async {
+    if (_panelOpen || _closed) return;
+    _interactions.cancel();
+    setState(() => _panelOpen = true);
+    try {
+      final keywords = await showDialog<List<String>>(
+        context: context,
+        builder: (_) => Theme(
+          data: AppTheme.dark,
+          child: DanmakuKeywordsDialog(
+            keywords: widget.store.playbackPreferences.danmakuSettings.keywords,
+          ),
+        ),
+      );
+      if (keywords == null ||
+          !mounted ||
+          _closed ||
+          widget.store.locked ||
+          widget.store.profileEpoch != _profileEpoch)
+        return;
+      await _setPreferences(
+        _preferences.copyWith(
+          danmakuSettings: _preferences.danmakuSettings.copyWith(
+            keywords: keywords,
+          ),
+        ),
+      );
+    } catch (_) {
+      _notice('屏蔽关键词未能保存，请重试');
+    } finally {
+      if (mounted && !_closed) {
+        setState(() => _panelOpen = false);
+        _playerFocus.requestFocus();
+      }
+    }
+  }
+
+  Future<void> _showDanmakuSettings({
+    DanmakuSettingsTab initialTab = DanmakuSettingsTab.sources,
+  }) async {
     if (_panelOpen || _closed) return;
     _interactions.cancel();
     setState(() => _panelOpen = true);
@@ -1566,6 +1708,7 @@ class _PlayerScreenState extends State<PlayerScreen>
             store: widget.store,
             controller: _danmaku,
             television: _television,
+            initialTab: initialTab,
           ),
         ),
       );
@@ -2102,8 +2245,7 @@ class _PlayerScreenState extends State<PlayerScreen>
             onQuality: () => _openPanel(PlayerMenuSection.quality),
             onSleepTimer: _showSleepTimer,
             sleepTimerLabel: _sleepTimer.label,
-            onDanmaku: _supportsDanmaku ? _toggleDanmaku : null,
-            onDanmakuSettings: _supportsDanmaku ? _showDanmakuSettings : null,
+            onDanmakuMenu: _supportsDanmaku ? _showDanmakuMenu : null,
             onPush: widget.mediaId == null ? _pushToDevice : null,
             onPictureInPicture: _canUsePictureInPicture
                 ? _enterPictureInPicture

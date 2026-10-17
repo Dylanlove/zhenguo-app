@@ -79,23 +79,8 @@ class SourceSite {
     SourceSite('ningguo', '柠果', '愛豆AV · 网页目录', adult: true),
     SourceSite('mangguo', '芒果', '真实人妻 · 网页目录', adult: true),
   ];
-  static const knownValues = [
-    hongguo,
-    ikanbot,
-    a123,
-    SourceSite('huangdou', '豆果', '魔改短剧 · 网页目录', adult: true),
-    SourceSite('huangju', '剧果', '红果黄剧 · AI 成人短剧', adult: true),
-    SourceSite('yeguo', '野果', '野果短剧 · AI 成人短剧', adult: true),
-    dsd,
-    SourceSite('huangguo-video', '黄果视频', '黄果 · AI 成人短剧', adult: true),
-    SourceSite('huangguoai', '黄果 AI', '黄果 · AI 成人短剧', adult: true),
-    SourceSite('cloudfront', '黄果旧版', '黄果 · 旧 API 剧库', adult: true),
-    ...duanjuValues,
-  ];
   static const allValues = [
     hongguo,
-    ikanbot,
-    a123,
     SourceSite('huangdou', '豆果', '魔改短剧 · 网页目录', adult: true),
     SourceSite('huangju', '剧果', '红果黄剧 · AI 成人短剧', adult: true),
     SourceSite('yeguo', '野果', '野果短剧 · AI 成人短剧', adult: true),
@@ -104,7 +89,13 @@ class SourceSite {
     SourceSite('huangguoai', '黄果 AI', '黄果 · AI 成人短剧', adult: true),
     SourceSite('cloudfront', '黄果旧版', '黄果 · 旧 API 剧库', adult: true),
     ...duanjuValues,
+    ikanbot,
+    a123,
   ];
+  static final knownValues = List<SourceSite>.unmodifiable([
+    ...allValues.where((site) => !site.adult),
+    ...allValues.where((site) => site.adult),
+  ]);
   // 默认版本保持红果单站源；全站源版再开放已知站源集合。
   static final values = allSourcesEnabled ? knownValues : [hongguo];
   static bool isAvailable(String id) => values.any((site) => site.id == id);

@@ -140,6 +140,13 @@ void main() {
       );
       await tester.pumpAndSettle();
       for (final source in [SourceSite.ikanbot, SourceSite.a123]) {
+        if (allSourcesEnabled) {
+          await tester.scrollUntilVisible(
+            find.byKey(ValueKey('source-${source.id}')),
+            500,
+          );
+          await tester.pumpAndSettle();
+        }
         expect(
           find.byKey(ValueKey('source-${source.id}')),
           allSourcesEnabled ? findsOneWidget : findsNothing,

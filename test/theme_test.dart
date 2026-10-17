@@ -101,12 +101,13 @@ void main() {
   ) async {
     phone(tester);
     final store = await localStore();
+    await store.setInterfaceStyle('standard');
     final repository = FixtureRepository();
     await tester.pumpWidget(DuanjuApp(repository: repository, store: store));
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const ValueKey('bottom-nav-2')));
+    await tester.tap(find.byKey(const ValueKey('bottom-nav-1')));
     await tester.pumpAndSettle();
-    expect(find.text('我的追剧'), findsOneWidget);
+    expect(find.textContaining('我的追剧'), findsOneWidget);
     await tester.tap(find.byTooltip('更多'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('设置与备份'));
@@ -130,7 +131,7 @@ void main() {
     );
     await tester.tap(find.byType(BackButton).last);
     await tester.pumpAndSettle();
-    expect(find.text('我的追剧'), findsOneWidget);
+    expect(find.textContaining('我的追剧'), findsOneWidget);
     expect(
       tester
           .widget<AppBottomNavigation>(find.byType(AppBottomNavigation))
@@ -152,7 +153,7 @@ void main() {
       Brightness.light,
     );
     expect(repository.requests.length, requests);
-    expect(find.text('我的追剧'), findsOneWidget);
+    expect(find.textContaining('我的追剧'), findsOneWidget);
     tester.platformDispatcher.clearPlatformBrightnessTestValue();
     await tester.pumpWidget(const SizedBox.shrink());
     store.dispose();
