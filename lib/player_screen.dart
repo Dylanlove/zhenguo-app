@@ -1555,69 +1555,44 @@ class _PlayerScreenState extends State<PlayerScreen>
     }
   }
 
-  PopupMenuItem<_DanmakuMenuAction> _danmakuMenuItem(
+  GlassMenuEntry<_DanmakuMenuAction> _danmakuMenuItem(
     _DanmakuMenuAction action,
     String label,
     IconData icon,
-  ) => PopupMenuItem(
-    key: ValueKey('player-danmaku-${action.name}'),
+  ) => GlassMenuEntry(
     value: action,
-    height: 52,
-    child: Row(
-      children: [
-        Expanded(child: Text(label)),
-        const SizedBox(width: 24),
-        Icon(icon, size: 21),
-      ],
-    ),
+    label: Text(label, key: ValueKey('player-danmaku-${action.name}')),
+    trailing: Icon(icon),
   );
 
   Future<void> _showDanmakuMenu(BuildContext buttonContext) async {
     if (_panelOpen || _closed || !_supportsDanmaku) return;
-    final button = buttonContext.findRenderObject()! as RenderBox;
-    final overlay =
-        Navigator.of(
-              buttonContext,
-              rootNavigator: true,
-            ).overlay!.context.findRenderObject()!
-            as RenderBox;
-    final position = RelativeRect.fromRect(
-      button.localToGlobal(Offset.zero, ancestor: overlay) & button.size,
-      Offset.zero & overlay.size,
-    );
+    final anchor = glassMenuAnchor(buttonContext);
+    if (anchor == null) return;
     _interactions.cancel();
     setState(() => _panelOpen = true);
     _DanmakuMenuAction? action;
     try {
-      action = await showMenu<_DanmakuMenuAction>(
+      action = await showGlassMenu<_DanmakuMenuAction>(
         context: buttonContext,
-        useRootNavigator: true,
-        position: position,
-        semanticLabel: '弹幕菜单',
-        color: const Color(0xF22C2C2E),
-        surfaceTintColor: Colors.transparent,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        constraints: const BoxConstraints(minWidth: 240, maxWidth: 300),
-        menuPadding: const EdgeInsets.symmetric(vertical: 4),
-        items: [
+        anchor: anchor,
+        alignRight: true,
+        entries: [
           _danmakuMenuItem(
             _DanmakuMenuAction.sources,
             '数据源设置',
             Icons.dns_outlined,
           ),
-          const PopupMenuDivider(height: 1),
           _danmakuMenuItem(
             _DanmakuMenuAction.display,
             '显示设置',
             Icons.settings_outlined,
           ),
-          const PopupMenuDivider(height: 1),
           _danmakuMenuItem(
             _DanmakuMenuAction.keywords,
             '过滤关键词',
             Icons.filter_alt_outlined,
           ),
-          const PopupMenuDivider(height: 1),
           _danmakuMenuItem(
             _danmakuEnabled
                 ? _DanmakuMenuAction.disable
