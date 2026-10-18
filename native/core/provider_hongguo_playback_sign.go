@@ -75,7 +75,7 @@ func hongguoPlaybackGorgon(query string, body [16]byte, timestamp uint32, random
 	j := 0
 	for i := range table {
 		j = (j + int(table[i]) + int(key[i%len(key)])) & 255
-		table[i], table[j] = table[j], table[i]
+		table[i] = table[j]
 	}
 	j = 0
 	for offset, value := range payload {
