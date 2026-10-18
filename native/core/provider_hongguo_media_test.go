@@ -78,30 +78,44 @@ func hongguoEncryptedURLFixture(address string, seed []byte) string {
 	return base64.StdEncoding.EncodeToString(encrypted)
 }
 
-func TestHongguoBatchPlaybackHeadersQualitiesAndPlaylist(t *testing.T) {
+func TestHongguoSignedPlaybackHeadersQualitiesAndPlaylist(t *testing.T) {
 	seed := []byte("synthetic-hongguo-address-seed")
 	var base string
-	modelRequests, fallbackRequests, mediaRequests := 0, 0, 0
+	modelRequests, fallbackRequests, mediaRequests, pageRequests := 0, 0, 0, 0
 	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		switch request.URL.Path {
 		case "/player/700001/800002":
-			_, _ = io.WriteString(writer, hongguoWebMediaFixture("700001", "800002", 1, base+"/video/public/800002/360p.mp4"))
-		case "/novel/player/multi_video_model/preload/v1/":
+			pageRequests++
+			_, _ = io.WriteString(writer, hongguoWebMediaFixture("700001", "800002", 2, base+"/video/public/800002/360p.mp4"))
+		case "/novel/player/multi_video_model/v1/":
 			modelRequests++
 			var payload map[string]any
 			_ = json.NewDecoder(request.Body).Decode(&payload)
 			ids, _ := nestedMap(payload, "mixed_video_id_map")["1004"].([]any)
-			if request.Method != http.MethodPost || len(ids) != 1 || ids[0] != "800002" || payload["dr_scene"] != "preload" || mapString(nestedMap(payload, "biz_param"), "video_platform") != "1024" || len(nestedMap(payload, "biz_param")) != 8 {
+			if request.Method != http.MethodPost || len(ids) != 1 || ids[0] != "800002" || payload["dr_scene"] != nil || mapString(nestedMap(payload, "biz_param"), "video_platform") != "1024" || len(nestedMap(payload, "biz_param")) != 8 {
 				t.Errorf("wrong batch request: %s, %+v", request.Method, payload)
 			}
 			if request.Header.Get("X-Gorgon") == "" || request.Header.Get("X-SS-STUB") == "" || request.URL.Query().Get("host_abi") != "arm64-v8a" {
 				t.Errorf("batch signature or query missing: %+v", request.Header)
 			}
+			for _, header := range []string{"X-Ladon", "X-Khronos", "X-Argus", "X-Gorgon", "X-Helios", "X-Medusa"} {
+				if request.Header.Get(header) == "" {
+					t.Errorf("signed playback header missing: %s", header)
+				}
+			}
+			for _, key := range []string{"device_id", "iid"} {
+				if value := request.URL.Query().Get(key); len(value) != 18 || !hongguoNumericID.MatchString(value) {
+					t.Errorf("playback device ID must contain 18 digits: %s", key)
+				}
+			}
+			if request.Header.Get("User-Agent") != hongguoPlaybackUserAgent || request.URL.Query().Get("version_code") != "71332" {
+				t.Error("playback protocol does not match the supplied implementation")
+			}
 			model, _ := json.Marshal(map[string]any{"video_id": "800002", "video_duration": 8, "fallback_api": map[string]any{"fallback_api": base + "/fallback?token=a%2Fb"}})
 			_ = json.NewEncoder(writer).Encode(map[string]any{"data": map[string]any{"800002": map[string]any{"video_model": string(model)}}})
 		case "/fallback":
 			fallbackRequests++
-			if request.Header.Get("User-Agent") != hongguoAppUserAgent || request.Header.Get("Referer") != "" || request.URL.RawQuery != "token=a%2Fb" {
+			if request.Header.Get("User-Agent") != hongguoPlaybackUserAgent || request.Header.Get("Referer") != "" || request.URL.RawQuery != "token=a%2Fb" {
 				t.Errorf("fallback request changed its signed URL or headers: %+v, %s", request.Header, request.URL.RawQuery)
 			}
 			variant := func(path, codec string, height int) map[string]any {
@@ -119,7 +133,7 @@ func TestHongguoBatchPlaybackHeadersQualitiesAndPlaylist(t *testing.T) {
 		case "/best.m3u8", "/part.ts":
 			mediaRequests++
 			_, hasReferer := request.Header["Referer"]
-			if hasReferer || request.Header.Get("Origin") != "" || request.Header.Get("User-Agent") != hongguoAppUserAgent {
+			if hasReferer || request.Header.Get("Origin") != "" || request.Header.Get("User-Agent") != hongguoPlaybackUserAgent {
 				t.Errorf("media request lost its App header policy: %+v", request.Header)
 			}
 			if request.URL.Path == "/best.m3u8" {
@@ -147,8 +161,8 @@ func TestHongguoBatchPlaybackHeadersQualitiesAndPlaylist(t *testing.T) {
 	if err != nil || media.URL != base+"/best.m3u8" || len(media.Variants) != 4 || media.Quality != 1080 || media.Duration != 8*time.Second || media.Playlist == "" || len(media.CENCKey) != 16 {
 		t.Fatalf("batch playback did not preserve media and variants: %+v, %v", media, err)
 	}
-	if modelRequests != 1 || fallbackRequests != 1 {
-		t.Fatalf("unexpected resolver attempts: batch=%d fallback=%d", modelRequests, fallbackRequests)
+	if modelRequests != 1 || fallbackRequests != 1 || pageRequests != 0 {
+		t.Fatalf("unexpected resolver attempts: batch=%d fallback=%d web=%d", modelRequests, fallbackRequests, pageRequests)
 	}
 	plan, err := engine.nativeOpenPlayback(context.Background(), nativePlaybackChoices(media, 1080))
 	if err != nil {
@@ -239,5 +253,55 @@ func TestHongguoSpadeRejectsMalformedOrWrongSeed(t *testing.T) {
 		if _, err := decryptHongguoSpadeURL(value, []byte("wrong-seed")); err == nil {
 			t.Fatal("invalid encrypted media address was accepted")
 		}
+	}
+}
+
+func TestHongguoSignedModelDynamicQualitiesAndEncryption(t *testing.T) {
+	seed := []byte("synthetic-signed-model-seed")
+	model := map[string]any{
+		"video_duration": 8,
+		"dynamic_video": map[string]any{
+			"key_seed": base64.StdEncoding.EncodeToString(seed),
+			"dynamic_video_list": map[string]any{
+				"1080p": map[string]any{
+					"main_url":   hongguoEncryptedURLFixture("https://media.example.test/high.mp4?token=a%2Fb", seed),
+					"backup_url": hongguoEncryptedURLFixture("https://backup.example.test/high.mp4", seed),
+					"codec_type": "h264", "encrypt": true,
+					"spade_a": "m78T+Vu+EvdZvhL1X7kR90G6DvVfpSbcXaUm3luiJdyloGNsfXFwd2A=",
+				},
+				"720p":  map[string]any{"play_addr": map[string]any{"url_list": []any{"https://media.example.test/mid.mp4"}}},
+				"360p":  map[string]any{"main_url": "https://media.example.test/low.mp4"},
+				"2160p": map[string]any{"main_url": "https://media.example.test/unsupported.mp4", "codec_type": "bytevc2"},
+			},
+		},
+	}
+	media, err := selectHongguoAppMedia(model)
+	if err != nil || media.URL != "https://media.example.test/high.mp4?token=a%2Fb" || media.Quality != 1080 || len(media.Variants) != 4 || len(media.CENCKey) != 16 {
+		t.Fatalf("signed dynamic model lost quality, addresses or key: %+v, %v", media, err)
+	}
+	choice := nativePlaybackChoices(media, 720)
+	if len(choice.media) != 1 || choice.media[0].Quality != 720 || choice.media[0].URL != "https://media.example.test/mid.mp4" {
+		t.Fatalf("manual quality must select the actual returned variant: %+v", choice)
+	}
+	if media.credentials == nil || media.credentials.userAgent != "com.phoenix.read/71332" || media.Referer != "https://novel.snssdk.com/" {
+		t.Fatal("signed media did not retain the supplied playback headers")
+	}
+}
+
+func TestHongguoSignedPlaybackDoesNotFallBackToPublicVideo(t *testing.T) {
+	requests := 0
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		requests++
+		if request.URL.Path != "/novel/player/multi_video_model/v1/" {
+			t.Errorf("failed signed playback must not silently select public low quality: %s", request.URL.Path)
+		}
+		_, _ = io.WriteString(writer, `{"data":{}}`)
+	}))
+	defer server.Close()
+	d := &Downloader{cfg: Config{Retries: 1, HongguoURL: server.URL}, client: server.Client(), limiter: newRequestLimiter(1, 0)}
+	d.hongguoClient().baseURL = server.URL
+	_, err := d.resolveHongguoMedia(context.Background(), Task{DramaID: "hongguo:700001", Chapter: Chapter{VideoURL: "hongguo-cenc://800001"}})
+	if err == nil || requests != 1 || !strings.Contains(err.Error(), "高清接口") {
+		t.Fatalf("failed signed playback must report its error: requests=%d, error=%v", requests, err)
 	}
 }

@@ -154,7 +154,13 @@ func decodeHongguoBase64(value string) ([]byte, error) {
 	if err == nil {
 		return decoded, nil
 	}
-	return base64.RawStdEncoding.Strict().DecodeString(value)
+	for _, encoding := range []*base64.Encoding{base64.RawStdEncoding.Strict(), base64.URLEncoding.Strict(), base64.RawURLEncoding.Strict()} {
+		decoded, err = encoding.DecodeString(value)
+		if err == nil {
+			return decoded, nil
+		}
+	}
+	return nil, err
 }
 
 func hongguoContentKey(value string) ([]byte, error) {
