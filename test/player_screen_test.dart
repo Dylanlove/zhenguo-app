@@ -151,11 +151,11 @@ void main() {
         await settleOperations(tester);
       }
       expect(repository.primaryCalls, 2);
-      expect(repository.fallbackCalls, 2);
+      expect(repository.fallbackCalls, 1);
       expect(find.text('暂时无法播放'), findsOneWidget);
       expect(repository.active, isEmpty);
       await tester.pump(const Duration(seconds: 25));
-      expect(repository.primaryCalls + repository.fallbackCalls, 4);
+      expect(repository.primaryCalls + repository.fallbackCalls, 3);
       repository.broken = false;
       await tester.tap(find.text('重试播放'));
       await settleOperations(tester);
@@ -165,6 +165,51 @@ void main() {
       expect(repository.active, isEmpty);
     },
   );
+
+  for (final exhausted in [false, true]) {
+    testWidgets(
+      'Hongguo ${exhausted ? 'exhausts every route before one refresh' : 'reaches a working route beyond four attempts'}',
+      (tester) async {
+        final repository = SequenceRouteRepository(
+          workingRoute: exhausted ? null : 6,
+        );
+        final player = ScriptedPlayer();
+        await mount(tester, repository, player);
+        for (var attempt = 0; attempt < 10; attempt++) {
+          await tester.pump(const Duration(seconds: 1));
+          await settleOperations(tester);
+        }
+        expect(repository.fallbackCalls, 6);
+        expect(repository.primaryCalls, exhausted ? 2 : 1);
+        expect(repository.openedRoutes, [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          if (exhausted) 0,
+        ]);
+        expect(repository.active, hasLength(exhausted ? 0 : 1));
+        if (exhausted) {
+          expect(find.text('暂时无法播放'), findsOneWidget);
+          await tester.pump(const Duration(seconds: 25));
+          expect(repository.primaryCalls, 2);
+          expect(repository.fallbackCalls, 6);
+          repository.workingRoute = 0;
+          await tester.tap(find.text('重试播放'));
+          await settleOperations(tester);
+          expect(repository.primaryCalls, 3);
+          expect(repository.active, hasLength(1));
+        }
+        expect(find.text('暂时无法播放'), findsNothing);
+        expect(player.opened.last.start, const Duration(seconds: 7));
+        await unmount(tester, player);
+        expect(repository.active, isEmpty);
+      },
+    );
+  }
 
   testWidgets(
     'switching episodes ignores a delayed fallback and frees both old plans',

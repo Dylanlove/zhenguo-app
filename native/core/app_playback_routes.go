@@ -26,7 +26,7 @@ func nativePlaybackChoices(media providerMedia, quality int) nativePlaybackChoic
 		if !isProviderHTTPMediaURL(option.URL) {
 			continue
 		}
-		identity := option.URL + "\x00" + option.Referer + "\x00" + hex.EncodeToString(option.CENCKey) + "\x00" + hex.EncodeToString(option.HLSKey)
+		identity := option.URL + "\x00" + option.Referer + "\x00" + hex.EncodeToString(option.CENCKey) + "\x00" + hex.EncodeToString(option.HLSKey) + "\x00" + option.RouteName
 		if seen[identity] {
 			continue
 		}
@@ -74,6 +74,11 @@ func (engine *nativeEngine) nativeOpenPlayback(ctx context.Context, choice nativ
 		URL: media.URL, Headers: map[string]string{"User-Agent": userAgent, "Referer": media.Referer},
 		Key: hex.EncodeToString(media.CENCKey), Quality: media.Quality, Qualities: choice.qualities,
 		RouteIndex: choice.index, RouteCount: len(choice.media), Session: hex.EncodeToString(tokenBytes),
+	}
+	if media.RouteName != "" {
+		for _, option := range choice.media {
+			plan.RouteNames = append(plan.RouteNames, option.RouteName)
+		}
 	}
 	if media.credentials != nil && !media.credentials.expires.IsZero() {
 		if !time.Now().Before(media.credentials.expires) {

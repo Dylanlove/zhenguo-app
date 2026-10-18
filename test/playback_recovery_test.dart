@@ -27,15 +27,56 @@ void main() {
     expect(recovery.next(route(0, count: 1)), PlaybackRecoveryAction.stop);
   });
 
-  test('many failing alternatives cannot exceed the automatic retry limit', () {
+  test('all sources exhaust 31 routes before one refresh and then stop', () {
     final recovery = PlaybackRecovery();
-    for (var i = 0; i < 3; i++) {
+    for (var index = 0; index < 30; index++) {
       expect(
-        recovery.next(route(i, count: 10)),
+        recovery.next(route(index, count: 31)),
         PlaybackRecoveryAction.alternative,
       );
     }
-    expect(recovery.next(route(3, count: 10)), PlaybackRecoveryAction.stop);
+    expect(recovery.next(route(30, count: 31)), PlaybackRecoveryAction.refresh);
+    expect(recovery.next(route(0, count: 31)), PlaybackRecoveryAction.stop);
+    recovery.reset();
+    expect(
+      recovery.next(route(0, count: 31)),
+      PlaybackRecoveryAction.alternative,
+    );
+  });
+
+  test('fallback cannot repeat a line or extend its original limit', () {
+    final recovery = PlaybackRecovery();
+    expect(recovery.next(route(0)), PlaybackRecoveryAction.alternative);
+    expect(recovery.next(route(0)), PlaybackRecoveryAction.stop);
+    recovery.reset();
+    expect(
+      recovery.next(route(0, count: 2)),
+      PlaybackRecoveryAction.alternative,
+    );
+    expect(recovery.next(route(1, count: 31)), PlaybackRecoveryAction.refresh);
+    expect(recovery.next(route(0)), PlaybackRecoveryAction.stop);
+  });
+
+  test('recovery starting at a later route only tries remaining routes', () {
+    final recovery = PlaybackRecovery();
+    expect(
+      recovery.next(route(5, count: 7)),
+      PlaybackRecoveryAction.alternative,
+    );
+    expect(recovery.next(route(6, count: 7)), PlaybackRecoveryAction.refresh);
+    expect(recovery.next(route(0, count: 7)), PlaybackRecoveryAction.stop);
+  });
+
+  test('site route labels preserve gaps and old plans use their positions', () {
+    final plan = PlaybackPlan.fromJson({
+      'url': 'https://media.test/last.mp4',
+      'routeIndex': 1,
+      'routeCount': 2,
+      'routeNames': ['线路 2', '线路 10'],
+    });
+    expect(plan.routeLabel(0), '线路 2');
+    expect(plan.routeLabel(plan.routeIndex), '线路 10');
+    expect(route(1).routeLabel(1), '线路 2');
   });
 
   test(

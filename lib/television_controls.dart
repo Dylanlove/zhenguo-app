@@ -683,6 +683,7 @@ class TelevisionSettingsDialog extends StatelessWidget {
     this.onCompareEnhancement,
     this.routeIndex = 0,
     this.routeCount = 0,
+    this.routeLabel,
     this.onRoute,
   });
   final double speed;
@@ -700,6 +701,7 @@ class TelevisionSettingsDialog extends StatelessWidget {
   final VoidCallback? onCompareEnhancement;
   final int routeIndex;
   final int routeCount;
+  final String Function(int)? routeLabel;
   final ValueChanged<int>? onRoute;
 
   @override
@@ -764,7 +766,7 @@ class TelevisionSettingsDialog extends StatelessWidget {
                   for (var route = 0; route < routeCount; route++)
                     RemoteButton(
                       key: ValueKey('tv-route-$route'),
-                      label: '线路 ${route + 1}',
+                      label: routeLabel?.call(route) ?? '线路 ${route + 1}',
                       selected: route == routeIndex,
                       onPressed: () => onRoute!(route),
                     ),

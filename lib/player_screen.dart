@@ -1113,7 +1113,9 @@ class _PlayerScreenState extends State<PlayerScreen>
             _openedIndex = -1;
             await _player.stop();
           } finally {
-            await widget.repository.release(current.session);
+            if (!_manualRoutesAvailable) {
+              await widget.repository.release(current.session);
+            }
           }
         });
       } catch (_) {}
@@ -1125,6 +1127,8 @@ class _PlayerScreenState extends State<PlayerScreen>
               ? widget.allowOnlineFallback
                     ? '本地视频读取失败，请重试或重新下载；也可以手动改为在线播放。'
                     : '本地成品读取失败，请重试或重新生成。'
+              : SourceSite.byId(widget.detail.drama.source).filmSource
+              ? '自动换线及恢复未成功，请检查网络后重试，也可手动选择播放线路或其他站源。'
               : '自动恢复未成功，请检查网络后重试，也可换一集或选择其他清晰度。';
         });
       }
@@ -1754,6 +1758,7 @@ class _PlayerScreenState extends State<PlayerScreen>
               qualities: _plan?.qualities ?? [],
               actualQuality: _plan?.quality ?? 0,
               routeIndex: _plan?.routeIndex ?? 0,
+              routeLabel: _plan?.routeLabel,
               routeCount: _plan?.routeCount ?? 0,
               onRoute: _manualRoutesAvailable
                   ? (route) {
@@ -1893,6 +1898,7 @@ class _PlayerScreenState extends State<PlayerScreen>
               speed: _speed,
               quality: _requestedQuality,
               routeIndex: _plan?.routeIndex ?? 0,
+              routeLabel: _plan?.routeLabel,
               routeCount: _plan?.routeCount ?? 0,
               onRoute: _manualRoutesAvailable
                   ? (route) {
@@ -2163,8 +2169,13 @@ class _PlayerScreenState extends State<PlayerScreen>
     final videoTheme = _television
         ? televisionTheme(AppTheme.dark)
         : AppTheme.dark;
+    final plan = _plan;
+    final routeLabel =
+        plan != null && (plan.routeIndex > 0 || plan.routeNames.isNotEmpty)
+        ? ' · ${plan.routeLabel(plan.routeIndex)}'
+        : '';
     final episodeLabel =
-        '第 ${widget.detail.episodes[_index].number} 集${_plan?.local == true ? ' · 本地' : ''}${widget.detail.episodes[_index].vip ? ' · VIP 试看' : ''}${(_plan?.routeIndex ?? 0) > 0 ? ' · 线路 ${_plan!.routeIndex + 1}' : ''}';
+        '第 ${widget.detail.episodes[_index].number} 集${plan?.local == true ? ' · 本地' : ''}${widget.detail.episodes[_index].vip ? ' · VIP 试看' : ''}$routeLabel';
     final hideOverlayForPictureInPicture = _pictureInPictureVisible;
     final Widget controls = hideOverlayForPictureInPicture || _error != null
         ? const SizedBox.shrink()

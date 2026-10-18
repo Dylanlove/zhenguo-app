@@ -166,3 +166,53 @@ class RouteRepository extends FixtureRepository {
     active.remove(session);
   }
 }
+
+class SequenceRouteRepository extends RouteRepository {
+  SequenceRouteRepository({this.routeCount = 7, this.workingRoute});
+
+  final int routeCount;
+  int? workingRoute;
+  final openedRoutes = <int>[];
+  final selected = <int>[];
+
+  PlaybackPlan sequencePlan(int route) {
+    final session =
+        'sequence-${primaryCalls + fallbackCalls + selected.length}';
+    active.add(session);
+    openedRoutes.add(route);
+    return PlaybackPlan(
+      url:
+          'https://fixture.invalid/${route == workingRoute ? 'working' : 'broken'}-$session.mp4',
+      session: session,
+      routeIndex: route,
+      routeCount: routeCount,
+      routeNames: List.generate(routeCount, (index) => '线路 ${index + 1}'),
+    );
+  }
+
+  @override
+  Future<PlaybackPlan> resolve(
+    Drama drama,
+    Episode episode, {
+    int quality = 0,
+  }) async {
+    primaryCalls++;
+    requestedQualities.add(quality);
+    requestedEpisodes.add(episode.number);
+    return sequencePlan(0);
+  }
+
+  @override
+  Future<PlaybackPlan> fallback(PlaybackPlan current) async {
+    if (!active.contains(current.session)) throw StateError('released session');
+    fallbackCalls++;
+    return sequencePlan(current.routeIndex + 1);
+  }
+
+  @override
+  Future<PlaybackPlan> selectRoute(PlaybackPlan current, int route) async {
+    if (!active.contains(current.session)) throw StateError('released session');
+    selected.add(route);
+    return sequencePlan(route);
+  }
+}

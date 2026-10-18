@@ -14,6 +14,7 @@ type providerMedia struct {
 	credentials *providerMediaCredentials
 	URL         string
 	Referer     string
+	RouteName   string
 	Duration    time.Duration
 	Playlist    string
 	HLSKey      []byte

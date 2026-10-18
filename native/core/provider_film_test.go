@@ -222,6 +222,61 @@ func TestIkanbotAuthorizationFailureIsBounded(t *testing.T) {
 	}
 }
 
+func TestIkanbotPreservesWebsiteRouteOrderDuplicatesAndEpisodeGaps(t *testing.T) {
+	var base string
+	engine := filmTestEngine(t, func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/play/780774":
+			io.WriteString(w, filmTestIkanbotPage(strings.Repeat("a", 64)))
+		case "/api/getResN":
+			io.WriteString(w, filmTestIkanbotLines(
+				"第01集$"+base+"/one.m3u8",
+				"第01集$"+base+"/two.m3u8",
+				"第01集$"+base+"/one.m3u8",
+				"第01集$javascript:invalid",
+				"第01集$"+base+"/five.m3u8#第02集$"+base+"/second.mp4",
+			))
+		default:
+			t.Error("unexpected request", r.URL.Path)
+			http.NotFound(w, r)
+		}
+	})
+	base = engine.downloader.cfg.IkanbotURL
+	drama, chapters, err := engine.downloader.fetchIkanbotDetail(context.Background(), "780774")
+	if err != nil || len(chapters) != 2 {
+		t.Fatal("missing episodes", err, len(chapters))
+	}
+	for index, want := range [][]string{{"线路 1", "线路 2", "线路 3", "线路 5"}, {"线路 5"}} {
+		media, err := engine.downloader.resolveIkanbotMedia(context.Background(), Task{DramaID: drama.ID, Chapter: chapters[index]})
+		if err != nil {
+			t.Fatal(err)
+		}
+		choice := nativePlaybackChoices(media, 0)
+		var names []string
+		for _, option := range choice.media {
+			names = append(names, option.RouteName)
+		}
+		if !reflect.DeepEqual(names, want) {
+			t.Fatalf("episode %d changed website numbering/order: %v, want %v", index+1, names, want)
+		}
+		if index == 0 && (choice.media[0].URL != base+"/one.m3u8" || choice.media[1].URL != base+"/two.m3u8" || choice.media[0].URL != choice.media[2].URL) {
+			t.Fatal("website route 2 changed or duplicate website lines were removed")
+		}
+		plan, err := engine.nativeOpenPlayback(context.Background(), choice)
+		if err != nil || plan.RouteCount != len(want) || !reflect.DeepEqual(plan.RouteNames, want) {
+			t.Fatal("route labels lost in playback plan", plan.RouteNames, err)
+		}
+		body, err := json.Marshal(plan)
+		var decoded struct {
+			RouteNames []string `json:"routeNames"`
+		}
+		if err != nil || json.Unmarshal(body, &decoded) != nil || !reflect.DeepEqual(decoded.RouteNames, want) {
+			t.Fatal("route labels lost in native response")
+		}
+		engine.nativeReleasePlayback(plan.Session)
+	}
+}
+
 func TestA123DetailAndSameEpisodeRoutes(t *testing.T) {
 	requests := 0
 	var base string

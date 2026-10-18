@@ -147,6 +147,7 @@ type nativePlan struct {
 	Session         string            `json:"session,omitempty"`
 	RouteIndex      int               `json:"routeIndex"`
 	RouteCount      int               `json:"routeCount"`
+	RouteNames      []string          `json:"routeNames,omitempty"`
 }
 
 type nativeEngine struct {
@@ -380,7 +381,7 @@ func nativeDispatch(input nativeInput) (any, error) {
 			nativeState.engine = engine
 		}
 		nativeState.Unlock()
-		return map[string]any{"version": "0.2.168", "standalone": true, "allSources": buildAllSources == "true"}, nil
+		return map[string]any{"version": "0.2.170", "standalone": true, "allSources": buildAllSources == "true"}, nil
 	}
 	engine := nativeState.engine
 	nativeState.Unlock()

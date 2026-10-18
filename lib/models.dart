@@ -329,6 +329,7 @@ class PlaybackPlan {
     this.expiresAt = 0,
     this.routeIndex = 0,
     this.routeCount = 1,
+    this.routeNames = const [],
     this.local = false,
   });
   final String url;
@@ -341,8 +342,13 @@ class PlaybackPlan {
   final int expiresAt;
   final int routeIndex;
   final int routeCount;
+  final List<String> routeNames;
   final bool local;
   bool get hasAlternative => session.isNotEmpty && routeIndex + 1 < routeCount;
+  String routeLabel(int index) =>
+      index >= 0 && index < routeNames.length && routeNames[index].isNotEmpty
+      ? routeNames[index]
+      : '线路 ${index + 1}';
   factory PlaybackPlan.fromJson(Map<String, dynamic> json) => PlaybackPlan(
     url: json['url'] as String? ?? '',
     local: json['local'] == true,
@@ -360,6 +366,9 @@ class PlaybackPlan {
     routeCount: intValue(json['routeCount']) > 0
         ? intValue(json['routeCount'])
         : 1,
+    routeNames: (json['routeNames'] as List? ?? [])
+        .map((value) => value?.toString() ?? '')
+        .toList(),
   );
 }
 

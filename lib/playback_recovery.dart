@@ -3,29 +3,29 @@ import 'models.dart';
 enum PlaybackRecoveryAction { alternative, refresh, stop }
 
 class PlaybackRecovery {
-  static const maxAttempts = 3;
-  int _attempts = 0;
   bool _refreshed = false;
+  int _lastRoute = -1;
+  int? _routeCount;
 
   void reset() {
-    _attempts = 0;
     _refreshed = false;
+    _lastRoute = -1;
+    _routeCount = null;
   }
 
   PlaybackRecoveryAction next(PlaybackPlan plan) {
-    if (_attempts >= maxAttempts) {
+    final count = _routeCount ??= plan.routeCount;
+    if (_refreshed ||
+        plan.routeIndex <= _lastRoute ||
+        plan.routeIndex >= count) {
       return PlaybackRecoveryAction.stop;
     }
-    if (plan.hasAlternative) {
-      _attempts++;
+    _lastRoute = plan.routeIndex;
+    if (plan.hasAlternative && plan.routeIndex + 1 < count) {
       return PlaybackRecoveryAction.alternative;
     }
-    if (!_refreshed) {
-      _attempts++;
-      _refreshed = true;
-      return PlaybackRecoveryAction.refresh;
-    }
-    return PlaybackRecoveryAction.stop;
+    _refreshed = true;
+    return PlaybackRecoveryAction.refresh;
   }
 }
 

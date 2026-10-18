@@ -33,6 +33,7 @@ class PlayerMenu extends StatefulWidget {
     this.onCompareEnhancement,
     this.routeIndex = 0,
     this.routeCount = 0,
+    this.routeLabel,
     this.onRoute,
   });
 
@@ -53,6 +54,7 @@ class PlayerMenu extends StatefulWidget {
   final VoidCallback? onCompareEnhancement;
   final int routeIndex;
   final int routeCount;
+  final String Function(int)? routeLabel;
   final ValueChanged<int>? onRoute;
   final ValueChanged<int> onEpisode;
   final Future<void> Function(PlaybackPreferences) onPreferences;
@@ -202,7 +204,9 @@ class _PlayerMenuState extends State<PlayerMenu> {
                 for (var route = 0; route < widget.routeCount; route++)
                   ChoiceChip(
                     key: ValueKey('menu-route-$route'),
-                    label: Text('线路 ${route + 1}'),
+                    label: Text(
+                      widget.routeLabel?.call(route) ?? '线路 ${route + 1}',
+                    ),
                     selected: route == widget.routeIndex,
                     onSelected: _busy ? null : (_) => widget.onRoute!(route),
                   ),

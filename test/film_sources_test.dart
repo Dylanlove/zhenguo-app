@@ -32,6 +32,7 @@ class FilmRouteRepository extends RouteRepository {
       session: session,
       routeIndex: route,
       routeCount: 2,
+      routeNames: const ['线路 2', '线路 5'],
     );
   }
 
@@ -220,6 +221,10 @@ void main() {
               ValueKey(television ? 'tv-route-$route' : 'menu-route-$route'),
             );
             await tester.ensureVisible(option);
+            if (repository.selected.isNotEmpty) {
+              expect(find.text('线路 5'), findsOneWidget);
+              expect(find.text('线路 1'), findsNothing);
+            }
             await tester.tap(option);
             await settle(tester);
             await tester.pump(const Duration(milliseconds: 350));
@@ -267,5 +272,84 @@ void main() {
         skip: !allSourcesEnabled,
       );
     }
+  }
+
+  for (final exhausted in [false, true]) {
+    testWidgets(
+      'film playback ${exhausted ? 'exhausts every line and keeps manual selection valid' : 'reaches a working line after the fourth attempt'}',
+      (tester) async {
+        tester.view.physicalSize = const Size(1100, 720);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+        SharedPreferences.setMockInitialValues({});
+        final store = LocalStore(await SharedPreferences.getInstance());
+        await store.setPlaybackPreferences(
+          store.playbackPreferences.copyWith(danmaku: false),
+        );
+        final repository = SequenceRouteRepository(
+          workingRoute: exhausted ? null : 6,
+        );
+        final platform = ScriptedPlayer();
+        final detail = DramaDetail(
+          const Drama(id: 'ikanbot:fixture', source: 'ikanbot', title: '线路恢复'),
+          [
+            Episode({'id': 'ikanbot:fixture:ep-1', 'currentEpisode': 1}, 1),
+          ],
+        );
+        await tester.pumpWidget(
+          MaterialApp(
+            home: PlayerScreen(
+              detail: detail,
+              initialIndex: 0,
+              initialPosition: 7,
+              repository: repository,
+              store: store,
+              playerFactory: () => Player(platformPlayer: platform),
+              videoBuilder: (controls) => controls,
+            ),
+          ),
+        );
+        await settle(tester);
+        for (var attempt = 0; attempt < 10; attempt++) {
+          await tester.pump(const Duration(seconds: 1));
+          await settle(tester);
+        }
+        expect(repository.fallbackCalls, 6);
+        expect(repository.primaryCalls, exhausted ? 2 : 1);
+        expect(repository.openedRoutes, [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          if (exhausted) 0,
+        ]);
+        expect(repository.active, hasLength(1));
+        if (exhausted) {
+          expect(find.text('暂时无法播放'), findsOneWidget);
+          await tester.pump(const Duration(seconds: 25));
+          expect(repository.primaryCalls, 2);
+          expect(repository.fallbackCalls, 6);
+          repository.workingRoute = 1;
+          await tester.tap(find.byKey(const ValueKey('player-error-routes')));
+          await tester.pumpAndSettle();
+          await tester.tap(find.byKey(const ValueKey('menu-route-1')));
+          await settle(tester);
+          expect(repository.selected, [1]);
+          expect(find.text('暂时无法播放'), findsNothing);
+        }
+        expect(platform.opened.last.start, const Duration(seconds: 7));
+        await tester.pumpWidget(const SizedBox.shrink());
+        await settle(tester);
+        expect(repository.active, isEmpty);
+        expect(platform.disposed, isTrue);
+        expect(tester.takeException(), isNull);
+        store.dispose();
+      },
+      skip: !allSourcesEnabled,
+    );
   }
 }

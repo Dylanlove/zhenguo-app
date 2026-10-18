@@ -236,17 +236,15 @@ func parseIkanbotLines(raw json.RawMessage, mtype, pageURL string) ([]ikanbotLin
 		return nil, errors.New("爱看机器人线路数据无效")
 	}
 	lines := []ikanbotLine{}
-	seenLines := map[string]bool{}
-	for _, item := range payload.List {
+	for index, item := range payload.List {
 		var resources []struct {
-			Flag string `json:"flag"`
-			URL  string `json:"url"`
+			URL string `json:"url"`
 		}
 		if json.Unmarshal([]byte(item.ResData), &resources) != nil {
 			continue
 		}
 		for _, resource := range resources {
-			line := ikanbotLine{name: resource.Flag}
+			line := ikanbotLine{name: fmt.Sprintf("线路 %d", index+1)}
 			seen := map[string]bool{}
 			pairs := strings.Split(resource.URL, "#")
 			for index, pair := range pairs {
@@ -277,22 +275,12 @@ func parseIkanbotLines(raw json.RawMessage, mtype, pageURL string) ([]ikanbotLin
 			if len(line.episodes) == 0 {
 				continue
 			}
-			signature := []string{}
-			for _, episode := range line.episodes {
-				signature = append(signature, episode.key+"="+episode.address)
-			}
-			sort.Strings(signature)
-			identity := strings.Join(signature, "\n")
-			if !seenLines[identity] {
-				seenLines[identity] = true
-				lines = append(lines, line)
-			}
+			lines = append(lines, line)
 		}
 	}
 	if len(lines) == 0 {
 		return nil, errors.New("爱看机器人暂未返回可用的 MP4 或 M3U8 线路，请稍后重试")
 	}
-	sort.SliceStable(lines, func(i, j int) bool { return len(lines[i].episodes) > len(lines[j].episodes) })
 	return lines, nil
 }
 
@@ -399,12 +387,12 @@ func (d *Downloader) resolveIkanbotMedia(ctx context.Context, task Task) (provid
 		return providerMedia{}, err
 	}
 	options := []providerMedia{}
-	seen := map[string]bool{}
 	for _, line := range detail.lines {
 		for _, episode := range line.episodes {
-			if episode.key == key && !seen[episode.address] {
-				seen[episode.address] = true
-				options = append(options, d.filmMedia(source, episode.address, detail.pageURL))
+			if episode.key == key {
+				option := d.filmMedia(source, episode.address, detail.pageURL)
+				option.RouteName = line.name
+				options = append(options, option)
 			}
 		}
 	}
