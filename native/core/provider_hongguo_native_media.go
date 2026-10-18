@@ -2,10 +2,8 @@ package core
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"net/http"
 	"sort"
 	"strconv"
 	"strings"
@@ -16,24 +14,26 @@ func (downloader *Downloader) resolveHongguoAppMedia(ctx context.Context, videoI
 	if !hongguoNumericID.MatchString(videoID) {
 		return providerMedia{}, errors.New("红果视频 ID 无效")
 	}
-	payload := map[string]any{
-		"video_id": videoID, "content_type": 1,
-		"biz_param": map[string]any{"need_all_video_definition": true, "video_platform": 3},
-	}
-	result, err := downloader.hongguoAppRequest(ctx, http.MethodPost, "/novel/player/video_model/v1/", nil, payload)
+	model, err := downloader.hongguoPlaybackModel(ctx, videoID)
 	if err != nil {
 		return providerMedia{}, err
 	}
-	data := nestedMap(result, "data")
-	model, _ := data["video_model"].(map[string]any)
-	if encoded, ok := data["video_model"].(string); ok {
-		decoder := json.NewDecoder(strings.NewReader(encoded))
-		decoder.UseNumber()
-		if err := decoder.Decode(&model); err != nil {
-			return providerMedia{}, errors.New("红果 App 播放信息格式异常")
+	var fallbackErr error
+	if model["fallback_api"] != nil {
+		var media providerMedia
+		media, fallbackErr = downloader.resolveHongguoFallbackMedia(ctx, model)
+		if fallbackErr == nil {
+			return media, nil
+		}
+		if ctx.Err() != nil {
+			return providerMedia{}, ctx.Err()
 		}
 	}
-	return selectHongguoAppMedia(model)
+	media, directErr := selectHongguoAppMedia(model)
+	if directErr == nil {
+		return media, nil
+	}
+	return providerMedia{}, errors.Join(fallbackErr, directErr)
 }
 
 func selectHongguoAppMedia(model map[string]any) (providerMedia, error) {
