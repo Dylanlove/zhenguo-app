@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 
 import 'models.dart';
 import 'episode_browser.dart';
+import 'hongguo_series.dart';
+import 'player_series.dart';
 import 'playback_preferences.dart';
 import 'video_enhancement.dart';
 import 'video_enhancement_settings.dart';
@@ -35,6 +37,11 @@ class PlayerMenu extends StatefulWidget {
     this.routeCount = 0,
     this.routeLabel,
     this.onRoute,
+    this.seriesEntries = const [],
+    this.currentDramaId = '',
+    this.onSeason,
+    this.switchingSeason = false,
+    this.onDiagnostics,
   });
 
   final PlayerMenuSection section;
@@ -56,6 +63,11 @@ class PlayerMenu extends StatefulWidget {
   final int routeCount;
   final String Function(int)? routeLabel;
   final ValueChanged<int>? onRoute;
+  final List<HongguoSeriesEntry> seriesEntries;
+  final String currentDramaId;
+  final ValueChanged<Drama>? onSeason;
+  final bool switchingSeason;
+  final VoidCallback? onDiagnostics;
   final ValueChanged<int> onEpisode;
   final Future<void> Function(PlaybackPreferences) onPreferences;
   final Future<void> Function() onFavorite;
@@ -136,11 +148,23 @@ class _PlayerMenuState extends State<PlayerMenu> {
               ),
             Expanded(
               child: widget.section == PlayerMenuSection.episodes
-                  ? PlayerEpisodeGrid(
-                      episodes: widget.episodes,
-                      currentIndex: widget.currentIndex,
-                      keyPrefix: 'menu-episode',
-                      onSelected: widget.onEpisode,
+                  ? Column(
+                      children: [
+                        PlayerSeriesBar(
+                          entries: widget.seriesEntries,
+                          currentDramaId: widget.currentDramaId,
+                          onSelected: widget.onSeason,
+                          busy: widget.switchingSeason,
+                        ),
+                        Expanded(
+                          child: PlayerEpisodeGrid(
+                            episodes: widget.episodes,
+                            currentIndex: widget.currentIndex,
+                            keyPrefix: 'menu-episode',
+                            onSelected: widget.onEpisode,
+                          ),
+                        ),
+                      ],
                     )
                   : SingleChildScrollView(
                       padding: const EdgeInsets.fromLTRB(18, 4, 18, 20),
@@ -265,6 +289,16 @@ class _PlayerMenuState extends State<PlayerMenu> {
               ),
             ),
             onCompare: widget.onCompareEnhancement ?? () {},
+          ),
+        if (widget.onDiagnostics != null &&
+            (all || widget.section == PlayerMenuSection.quality))
+          ListTile(
+            key: const ValueKey('player-diagnostics'),
+            contentPadding: EdgeInsets.zero,
+            leading: const Icon(Icons.troubleshoot_rounded),
+            title: const Text('播放诊断报告'),
+            subtitle: const Text('查看播放记录、复制报告或扫码获取摘要'),
+            onTap: widget.onDiagnostics,
           ),
         if (all && widget.showDanmaku) ...[
           ListTile(

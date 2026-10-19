@@ -13,9 +13,10 @@ class SourceHealthStep {
       host = json['host'] as String? ?? '',
       httpStatus = intValue(json['httpStatus']),
       elapsedMs = intValue(json['elapsedMs']),
-      cfRay = json['cfRay'] as String? ?? '';
+      cfRay = json['cfRay'] as String? ?? '',
+      code = json['code'] as String? ?? '';
 
-  final String name, state, message, host, cfRay;
+  final String name, state, message, host, cfRay, code;
   final int httpStatus, elapsedMs;
 }
 

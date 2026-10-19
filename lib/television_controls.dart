@@ -5,6 +5,8 @@ import 'package:flutter/services.dart';
 import 'package:media_kit/media_kit.dart';
 
 import 'models.dart';
+import 'hongguo_series.dart';
+import 'player_series.dart';
 import 'player_chrome.dart';
 import 'playback_preferences.dart';
 import 'video_enhancement.dart';
@@ -611,9 +613,16 @@ class TelevisionEpisodeDialog extends StatelessWidget {
     super.key,
     required this.episodes,
     required this.currentIndex,
+    this.seriesEntries = const [],
+    this.currentDramaId = '',
+    this.onSeason,
   });
   final List<Episode> episodes;
   final int currentIndex;
+
+  final List<HongguoSeriesEntry> seriesEntries;
+  final String currentDramaId;
+  final ValueChanged<Drama>? onSeason;
 
   @override
   Widget build(BuildContext context) => AlertDialog(
@@ -621,24 +630,37 @@ class TelevisionEpisodeDialog extends StatelessWidget {
     content: SizedBox(
       width: 700,
       height: MediaQuery.sizeOf(context).height * .55,
-      child: LayoutBuilder(
-        builder: (context, constraints) => RemoteGrid(
-          itemKeys: episodes.map((episode) => '${episode.number}').toList(),
-          columns: ((constraints.maxWidth - 12) / 96).floor().clamp(1, 8),
-          itemExtent: 64,
-          initialIndex: currentIndex,
-          autofocus: true,
-          padding: const EdgeInsets.all(6),
-          itemBuilder: (_, index, node, onFocus) => RemoteEpisodeButton(
-            key: ValueKey('tv-select-episode-${episodes[index].number}'),
-            number: episodes[index].number,
-            vip: episodes[index].vip,
-            current: index == currentIndex,
-            focusNode: node,
-            onFocus: onFocus,
-            onPressed: () => Navigator.pop(context, index),
+      child: Column(
+        children: [
+          PlayerSeriesBar(
+            entries: seriesEntries,
+            currentDramaId: currentDramaId,
+            onSelected: onSeason,
           ),
-        ),
+          Expanded(
+            child: LayoutBuilder(
+              builder: (context, constraints) => RemoteGrid(
+                itemKeys: episodes
+                    .map((episode) => '${episode.number}')
+                    .toList(),
+                columns: ((constraints.maxWidth - 12) / 96).floor().clamp(1, 8),
+                itemExtent: 64,
+                initialIndex: currentIndex,
+                autofocus: true,
+                padding: const EdgeInsets.all(6),
+                itemBuilder: (_, index, node, onFocus) => RemoteEpisodeButton(
+                  key: ValueKey('tv-select-episode-${episodes[index].number}'),
+                  number: episodes[index].number,
+                  vip: episodes[index].vip,
+                  current: index == currentIndex,
+                  focusNode: node,
+                  onFocus: onFocus,
+                  onPressed: () => Navigator.pop(context, index),
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     ),
     actions: [
@@ -685,6 +707,7 @@ class TelevisionSettingsDialog extends StatelessWidget {
     this.routeCount = 0,
     this.routeLabel,
     this.onRoute,
+    this.onDiagnostics,
   });
   final double speed;
   final int quality;
@@ -703,6 +726,7 @@ class TelevisionSettingsDialog extends StatelessWidget {
   final int routeCount;
   final String Function(int)? routeLabel;
   final ValueChanged<int>? onRoute;
+  final VoidCallback? onDiagnostics;
 
   @override
   Widget build(BuildContext context) => AlertDialog(
@@ -814,6 +838,15 @@ class TelevisionSettingsDialog extends StatelessWidget {
             ),
             const SizedBox(height: 8),
             Text(preloadStatus, style: const TextStyle(fontSize: 14)),
+            if (onDiagnostics != null) ...[
+              const SizedBox(height: 16),
+              RemoteButton(
+                key: const ValueKey('tv-playback-diagnostics'),
+                label: '播放诊断报告 / 扫码',
+                icon: Icons.qr_code_rounded,
+                onPressed: onDiagnostics,
+              ),
+            ],
             const SizedBox(height: 20),
             RemoteButton(
               label: favorite ? '取消追剧' : '加入追剧',

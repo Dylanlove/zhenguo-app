@@ -14,6 +14,7 @@ import 'background_downloads.dart';
 import 'local_store.dart';
 import 'app_build.dart';
 import 'source_status.dart';
+import 'playback_diagnostics.dart';
 import 'ranking_models.dart';
 import 'cover_decoder.dart';
 import 'catalog_updates.dart';
@@ -86,6 +87,7 @@ const unlockedActions = <String>{
 };
 
 abstract class AppRepository {
+  final playbackDiagnostics = PlaybackDiagnostics();
   Future<Map<String, dynamic>> ysp(
     String command,
     Map<String, dynamic> payload,
@@ -694,7 +696,7 @@ class NativeRepository extends AppRepository {
           }).catchError((Object _) => <String, dynamic>{}),
         );
       }
-      throw AppFailure('站源响应超时，请重试');
+      throw AppFailure('站源响应超时，请重试', code: 'TIMEOUT');
     } catch (_) {
       throw AppFailure('本地核心加载失败，请使用完整安装包重新安装');
     }
@@ -710,6 +712,14 @@ class NativeRepository extends AppRepository {
     if (build['allSources'] != allSourcesEnabled) {
       throw AppFailure('应用与原生核心的站源版本不一致，请使用完整安装包重新安装');
     }
+    try {
+      SourceSite.installCapabilities(
+        build['sources'],
+        build['capabilitySchema'],
+      );
+    } on FormatException catch (error) {
+      throw AppFailure(error.message);
+    }
     if (!background) await BackgroundDownloads.prepare();
     if (!background) {
       SystemProxyMonitor.start((value) async {
@@ -723,6 +733,10 @@ class NativeRepository extends AppRepository {
     String source, {
     bool force = false,
   }) async {
+    _authorize(source);
+    if (SourceSite.byId(source).capabilities?.categories == false) {
+      return const [CatalogCategory.all];
+    }
     final result = await _read('categories-$source', {
       'action': 'categories',
       'source': source,

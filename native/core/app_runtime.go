@@ -328,6 +328,7 @@ func NativeRequest(raw string) (result string) {
 	envelope := map[string]any{"ok": err == nil}
 	if err != nil {
 		envelope["error"] = publicError(err).Error()
+		envelope["code"] = diagnosticFailureCode(err, 0)
 		if errors.Is(err, errNativeLocalFile) {
 			envelope["code"] = "local_media"
 		}
@@ -381,7 +382,8 @@ func nativeDispatch(input nativeInput) (any, error) {
 			nativeState.engine = engine
 		}
 		nativeState.Unlock()
-		return map[string]any{"version": "0.2.173", "standalone": true, "allSources": buildAllSources == "true"}, nil
+		version := "0.2.174"
+		return map[string]any{"version": version, "standalone": true, "allSources": buildAllSources == "true", "capabilitySchema": 1, "sources": nativeCapabilities(version)}, nil
 	}
 	engine := nativeState.engine
 	nativeState.Unlock()

@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'app_build.dart';
+import 'source_capabilities.dart';
 
 class SourceSite {
   const SourceSite(this.id, this.name, this.description, {this.adult = false});
@@ -10,15 +11,40 @@ class SourceSite {
 
   /// 成人站源。绿色模式开启时不出现在站源管理与选择列表里。
   final bool adult;
-  bool get onlineSearch => id == 'hongguo' || filmSource || pagedSearch;
-  bool get filmSource => id == 'ikanbot' || id == 'a123';
+  static Map<String, SourceCapabilities> _nativeCapabilities = const {};
+  SourceCapabilities? get capabilities => _nativeCapabilities[id];
+  String get adapterFingerprint => capabilities?.fingerprint ?? '未加载';
+
+  static void installCapabilities(Object? raw, Object? schema) {
+    if (schema != 1 || raw is! List)
+      throw const FormatException('原生核心缺少站源能力描述，请更新完整安装包');
+    final items = <String, SourceCapabilities>{};
+    for (final entry in raw) {
+      if (entry is! Map || entry['id'] is! String)
+        throw const FormatException('站源能力描述无效');
+      final id = entry['id'] as String;
+      if (!isAvailable(id) || items.containsKey(id))
+        throw const FormatException('站源能力描述与当前版本不一致');
+      items[id] = SourceCapabilities.fromJson(Map<String, dynamic>.from(entry));
+    }
+    if (values.any((source) => !items.containsKey(source.id)))
+      throw const FormatException('原生核心的站源能力描述不完整');
+    _nativeCapabilities = Map.unmodifiable(items);
+  }
+
+  bool get onlineSearch =>
+      capabilities?.onlineSearch ??
+      (id == 'hongguo' || filmSource || pagedSearch);
+  bool get filmSource =>
+      capabilities?.film ?? (id == 'ikanbot' || id == 'a123');
   bool get pagedSearch =>
-      id == 'hongguo' ||
-      id == 'huangguoai' ||
-      id == 'huangju' ||
-      id == 'yeguo' ||
-      id == 'dsd' ||
-      duanjuPaged;
+      capabilities?.searchPaging ??
+      (id == 'hongguo' ||
+          id == 'huangguoai' ||
+          id == 'huangju' ||
+          id == 'yeguo' ||
+          id == 'dsd' ||
+          duanjuPaged);
   bool get duanjuPaged => const {
     'yaguo',
     'huaguo',
@@ -37,7 +63,7 @@ class SourceSite {
     'chengguo',
     'xiaoguo',
   }.contains(id);
-  bool get searchSuggestions => id == 'hongguo';
+  bool get searchSuggestions => capabilities?.suggestions ?? (id == 'hongguo');
   String get groupId => switch (id) {
     'huangguo-video' || 'huangguoai' || 'cloudfront' => 'huangguo',
     _ => id,

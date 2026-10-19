@@ -4,11 +4,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'app_notice.dart';
+import 'app_layout.dart';
 import 'core_bridge.dart';
+import 'diagnostics_screen.dart';
 import 'local_store.dart';
 import 'models.dart';
 import 'remote_widgets.dart';
 import 'source_status.dart';
+import 'playback_diagnostics.dart';
 
 String sourceTimestamp(DateTime? value) {
   if (value == null) return '尚无记录';
@@ -157,28 +160,40 @@ class _SourcesScreenState extends State<SourcesScreen> {
   }
 
   Future<void> _copy(SourceSite source, SourceStatus status) async {
-    final text = StringBuffer('${source.name}\n');
-    text.writeln(
-      '缓存 ${status.count} 部，更新 ${sourceTimestamp(status.updatedAt)}',
-    );
-    final health = status.health;
-    if (health != null) {
-      text.writeln('${health.label} · ${sourceTimestamp(health.checkedAt)}');
-      if (health.sample.isNotEmpty) text.writeln('检测剧集：${health.sample}');
-      for (final step in health.steps) {
-        text.writeln('${step.name}：${step.message}');
-        text.writeln(
-          '${step.host} HTTP ${step.httpStatus} · ${step.elapsedMs} ms',
-        );
-        if (step.cfRay.isNotEmpty) text.writeln('CF Ray: ${step.cfRay}');
-      }
-    }
-    if (status.error.isNotEmpty) text.writeln(status.error);
-    if (status.storageError.isNotEmpty) text.writeln(status.storageError);
-    await Clipboard.setData(ClipboardData(text: text.toString()));
+    if (!widget.store.allowsSource(source.id)) return;
+    await Clipboard.setData(ClipboardData(text: _report(source, status).text));
     if (mounted) {
       AppNotice.show(context, '诊断信息已复制');
     }
+  }
+
+  DiagnosticReport _report(SourceSite source, SourceStatus? status) =>
+      DiagnosticReport(
+        version: AppLayout.versionOf(context),
+        source: source.id,
+        sourceName: source.name,
+        fingerprint: source.adapterFingerprint,
+        status: status,
+        events: widget.repository.playbackDiagnostics.events(
+          '${widget.store.profile.id}:${widget.store.profileEpoch}',
+          source.id,
+        ),
+      );
+
+  void _openReport(SourceSite source) {
+    if (!widget.store.allowsSource(source.id)) return;
+    final report = _report(source, _statuses[source.id]);
+    final epoch = widget.store.profileEpoch;
+    Navigator.push<void>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => DiagnosticsScreen(
+          store: widget.store,
+          report: report,
+          profileEpoch: epoch,
+        ),
+      ),
+    );
   }
 
   Future<void> _updateAll() async {
@@ -299,6 +314,11 @@ class _SourcesScreenState extends State<SourcesScreen> {
             ),
             const SizedBox(height: 8),
             Text('最近更新：${sourceTimestamp(status?.updatedAt)}'),
+            if (source.capabilities != null)
+              Text(
+                source.capabilities!.labels.join(' · '),
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
             if (status != null && status.count > 0)
               Text(
                 '已加载至第 ${status.page} 页${status.hasMore ? ' · 可继续加载' : ' · 当前分页已加载完'}',
@@ -309,6 +329,12 @@ class _SourcesScreenState extends State<SourcesScreen> {
               runSpacing: 8,
               crossAxisAlignment: WrapCrossAlignment.center,
               children: [
+                OutlinedButton.icon(
+                  key: ValueKey('report-${source.id}'),
+                  onPressed: () => _openReport(source),
+                  icon: const Icon(Icons.qr_code_rounded),
+                  label: const Text('诊断报告 / 扫码'),
+                ),
                 FilledButton.icon(
                   key: ValueKey('update-${source.id}'),
                   onPressed: enabled ? () => _run(source, 'update') : null,
@@ -486,6 +512,15 @@ class _SourcesScreenState extends State<SourcesScreen> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text('${step.name}：${step.message}'),
+                              if (step.state == 'failed')
+                                Text(
+                                  DiagnosticIssue.classify(
+                                    step.message,
+                                    code: step.code,
+                                    status: step.httpStatus,
+                                  ).advice,
+                                  style: Theme.of(context).textTheme.bodySmall,
+                                ),
                               if (step.host.isNotEmpty || step.httpStatus > 0)
                                 Text(
                                   '${step.host}${step.httpStatus > 0 ? ' · HTTP ${step.httpStatus}' : ''} · ${step.elapsedMs} ms',

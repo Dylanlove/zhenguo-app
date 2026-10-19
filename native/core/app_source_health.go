@@ -21,6 +21,7 @@ type nativeHealthStep struct {
 	HTTPStatus int    `json:"httpStatus,omitempty"`
 	ElapsedMS  int64  `json:"elapsedMs"`
 	CFRay      string `json:"cfRay,omitempty"`
+	Code       string `json:"code,omitempty"`
 }
 
 type nativeSourceHealth struct {
@@ -96,6 +97,7 @@ func (engine *nativeEngine) checkSource(ctx context.Context, source string, sele
 			if errors.As(err, &backoff) {
 				step.HTTPStatus, step.Host = backoff.status, backoff.host
 			}
+			step.Code = diagnosticFailureCode(err, step.HTTPStatus)
 		}
 		report.Steps = append(report.Steps, step)
 		publish()
