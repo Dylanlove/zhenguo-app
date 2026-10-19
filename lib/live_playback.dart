@@ -37,9 +37,16 @@ class LivePlaybackController extends ChangeNotifier {
     if (!_disposed) notifyListeners();
   }
 
+  void _releaseYsp() {
+    if (_source?.protocol == LiveProtocol.ysp && _player != null) {
+      unawaited(repository.ysp.release().catchError((Object _) {}));
+    }
+  }
+
   Future<void> pauseForSleep() async {
     if (_disposed) return;
     _sleepPaused = true;
+    _releaseYsp();
     _generation++;
     _loading = false;
     _reconnect?.cancel();
@@ -72,6 +79,7 @@ class LivePlaybackController extends ChangeNotifier {
   String? _error;
   DateTime? _catchupStart;
   DateTime? _catchupEnd;
+  LiveProgramme? _catchupProgramme;
   String _quality = 'auto';
   double _speed = 1;
 
@@ -96,6 +104,7 @@ class LivePlaybackController extends ChangeNotifier {
   bool get ysp => channel?.source == 'ysp';
   DateTime? get catchupStart => _catchupStart;
   DateTime? get catchupEnd => _catchupEnd;
+  LiveProgramme? get catchupProgramme => _catchupProgramme;
   String get quality => _quality;
   double get speed => _speed;
   String get qualityLabel => ysp ? yspQualityLabel(_quality) : '线路';
@@ -167,8 +176,10 @@ class LivePlaybackController extends ChangeNotifier {
     int index = 0,
     bool autoplay = true,
   }) async {
+    if (source.protocol != LiveProtocol.ysp) _releaseYsp();
     _source = source;
     _catchupStart = _catchupEnd = null;
+    _catchupProgramme = null;
     _speed = 1;
     _channels = List.of(channels);
     _index = channels.isEmpty ? 0 : index.clamp(0, channels.length - 1);
@@ -203,6 +214,7 @@ class LivePlaybackController extends ChangeNotifier {
     _source = source;
     if (!reconnect && !keepCatchup) {
       _catchupStart = _catchupEnd = null;
+      _catchupProgramme = null;
       _speed = 1;
     }
     if (!reconnect) _retries = 0;
@@ -275,7 +287,11 @@ class LivePlaybackController extends ChangeNotifier {
     if (position != null && catchup) await seek(position);
   }
 
-  Future<void> playCatchup(DateTime start, DateTime end) async {
+  Future<void> playCatchup(
+    DateTime start,
+    DateTime end, {
+    LiveProgramme? programme,
+  }) async {
     if (!supportsCatchup) throw AppFailure('该频道未提供回看');
     final now = DateTime.now();
     if (start.isBefore(now.subtract(const Duration(days: 7))) ||
@@ -286,6 +302,7 @@ class LivePlaybackController extends ChangeNotifier {
     }
     _catchupStart = start;
     _catchupEnd = end;
+    _catchupProgramme = programme;
     _speed = 1;
     await play(_index, keepCatchup: true);
   }
@@ -365,6 +382,7 @@ class LivePlaybackController extends ChangeNotifier {
 
   @override
   void dispose() {
+    _releaseYsp();
     _disposed = true;
     sleepTimer.removeListener(_sleepChanged);
     sleepTimer.dispose();

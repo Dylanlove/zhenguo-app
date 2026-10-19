@@ -10,7 +10,7 @@ import (
 //go:embed assets/*
 var bundled embed.FS
 
-const Version = "9.4.0"
+const Version = "9.5.0"
 
 type Channel struct {
 	ID         string `json:"id"`

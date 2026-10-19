@@ -8,6 +8,7 @@ import 'app_notice.dart';
 import 'core_bridge.dart';
 import 'live_models.dart';
 import 'live_playback.dart';
+import 'live_programme_guide.dart';
 import 'live_player_screen.dart';
 import 'live_repository.dart';
 import 'live_sources.dart';
@@ -52,6 +53,7 @@ class _LiveScreenState extends State<LiveScreen> {
   bool _detached = false;
   bool _more = false;
   bool _hasMore = false;
+  bool _showProgrammes = false;
   String? _error;
   int _page = 1;
   int _generation = 0;
@@ -572,44 +574,51 @@ class _LiveScreenState extends State<LiveScreen> {
     );
   }
 
-  Widget _panel(BuildContext context, bool television) => Column(
-    children: [
-      _current(context),
-      Padding(
-        padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
-        child: Row(
+  Widget _panel(BuildContext context, bool television) =>
+      _showProgrammes && _playback.ysp
+      ? LiveProgrammeGuide(
+          playback: _playback,
+          onClose: () => setState(() => _showProgrammes = false),
+          onManualTime: () => showYspManualCatchupSheet(context, _playback),
+        )
+      : Column(
           children: [
-            Expanded(
-              child: TextButton.icon(
-                key: const ValueKey('live-favourites-button'),
-                onPressed: () => _loadChannels(_favouritesId),
-                icon: Icon(
-                  _group == _favouritesId
-                      ? Icons.star_rounded
-                      : Icons.star_border_rounded,
-                ),
-                label: Text('直播收藏（${_visibleFavourites.length}）'),
+            _current(context),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: TextButton.icon(
+                      key: const ValueKey('live-favourites-button'),
+                      onPressed: () => _loadChannels(_favouritesId),
+                      icon: Icon(
+                        _group == _favouritesId
+                            ? Icons.star_rounded
+                            : Icons.star_border_rounded,
+                      ),
+                      label: Text('直播收藏（${_visibleFavourites.length}）'),
+                    ),
+                  ),
+                  if (_group == _favouritesId)
+                    TextButton.icon(
+                      key: const ValueKey('live-categories-button'),
+                      onPressed: _loadPlatforms,
+                      icon: const Icon(Icons.list_rounded),
+                      label: const Text('直播分类'),
+                    ),
+                  if (_source?.protocol == LiveProtocol.ysp)
+                    IconButton(
+                      tooltip: '央视频分享与诊断',
+                      onPressed: _yspSettings,
+                      icon: const Icon(Icons.settings),
+                    ),
+                ],
               ),
             ),
-            if (_group == _favouritesId)
-              TextButton.icon(
-                key: const ValueKey('live-categories-button'),
-                onPressed: _loadPlatforms,
-                icon: const Icon(Icons.list_rounded),
-                label: const Text('直播分类'),
-              ),
-            if (_source?.protocol == LiveProtocol.ysp)
-              IconButton(
-                tooltip: '央视频分享与诊断',
-                onPressed: _yspSettings,
-                icon: const Icon(Icons.settings),
-              ),
+            Expanded(child: _lists(context, television)),
           ],
-        ),
-      ),
-      Expanded(child: _lists(context, television)),
-    ],
-  );
+        );
 
   Future<void> _yspSettings() async {
     await Navigator.push<void>(
@@ -662,7 +671,7 @@ class _LiveScreenState extends State<LiveScreen> {
           await showYspQualitySheet(context, _playback);
           break;
         case 'catchup':
-          await showYspCatchupSheet(context, _playback);
+          setState(() => _showProgrammes = true);
           break;
         case 'live':
           await _playback.returnToLive();
@@ -727,6 +736,13 @@ class _LiveScreenState extends State<LiveScreen> {
                     ],
                   ),
                 ),
+                if (_playback.ysp)
+                  TextButton.icon(
+                    key: const ValueKey('live-programme-button'),
+                    onPressed: () => setState(() => _showProgrammes = true),
+                    icon: const Icon(Icons.calendar_month_outlined, size: 18),
+                    label: const Text('节目单'),
+                  ),
                 SizedBox(
                   width: 46,
                   height: 46,

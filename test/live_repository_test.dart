@@ -78,7 +78,9 @@ const _showJson = '''
 ''';
 
 void main() {
-  final source = LiveSource.values.first;
+  final source = LiveSource.values.firstWhere(
+    (source) => source.id == 'xiuguo',
+  );
 
   test('多镜像分类取并集，失效与空分类被剔除', () async {
     final http = _FakeHttp({

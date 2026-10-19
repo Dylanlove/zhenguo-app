@@ -89,18 +89,26 @@ func (s *Service) rewriteHeaders(body, base string, headers map[string]string, o
 	return strings.Join(lines, "\n")
 }
 func (entry *playlistEntry) stitch(body, base string, plan Plan) string {
+	changed := entry.engine != "" && entry.engine != plan.Engine
+	entry.engine = plan.Engine
 	if strings.Contains(body, "#EXT-X-STREAM-INF") || strings.Contains(body, "#EXT-X-KEY") || strings.Contains(body, "#EXT-X-MAP") {
-		return strings.ReplaceAll(body, "#EXT-X-ENDLIST", "")
+		body = strings.ReplaceAll(body, "#EXT-X-ENDLIST", "")
+		if changed && !strings.Contains(body, "#EXT-X-STREAM-INF") {
+			body = injectDiscontinuity(body)
+		}
+		return body
 	}
 	duration := 6.0
 	date := ""
-	changed := entry.engine != "" && entry.engine != plan.Engine
-	entry.engine = plan.Engine
 	known := map[string]int{}
 	for index, value := range entry.segments {
-		address, _ := url.Parse(value.address)
-		known[address.Path+"\x00"+value.date] = index
+		known[segmentKey(value.address, value.date)] = index
 	}
+	if entry.seen == nil {
+		entry.seen = map[string]bool{}
+	}
+	var incoming []segment
+	discontinuity := false
 	for _, line := range strings.Split(strings.ReplaceAll(body, "\r\n", "\n"), "\n") {
 		line = strings.TrimSpace(line)
 		if strings.HasPrefix(line, "#EXTINF:") {
@@ -114,6 +122,10 @@ func (entry *playlistEntry) stitch(body, base string, plan Plan) string {
 			date = strings.TrimPrefix(line, "#EXT-X-PROGRAM-DATE-TIME:")
 			continue
 		}
+		if line == "#EXT-X-DISCONTINUITY" {
+			discontinuity = true
+			continue
+		}
 		if line == "" || strings.HasPrefix(line, "#") {
 			continue
 		}
@@ -121,12 +133,25 @@ func (entry *playlistEntry) stitch(body, base string, plan Plan) string {
 		if address == "" {
 			continue
 		}
-		uri, _ := url.Parse(address)
-		key := uri.Path + "\x00" + date
+		incoming = append(incoming, segment{duration: duration, date: date, address: address, headers: plan.Headers, discontinuity: discontinuity})
+		date = ""
+		discontinuity = false
+	}
+	initial := len(entry.segments) == 0
+	for index, candidate := range incoming {
+		address, date := candidate.address, candidate.date
+		key := segmentKey(address, date)
 		if index, ok := known[key]; ok {
 			entry.segments[index].address = address
 			entry.segments[index].headers = plan.Headers
-			date = ""
+			continue
+		}
+		if entry.seen[key] {
+			continue
+		}
+		entry.seen[key] = true
+		entry.seenOrder = append(entry.seenOrder, key)
+		if initial && index < len(incoming)-25 {
 			continue
 		}
 		if len(entry.segments) > 0 && date != "" {
@@ -135,21 +160,32 @@ func (entry *playlistEntry) stitch(body, base string, plan Plan) string {
 				a, aErr := time.Parse(time.RFC3339Nano, date)
 				b, bErr := time.Parse(time.RFC3339Nano, previous)
 				if aErr == nil && bErr == nil && !a.After(b) {
-					date = ""
 					continue
 				}
 			}
 		}
 		entry.sequence++
-		entry.segments = append(entry.segments, segment{entry.sequence, duration, date, address, plan.Headers, changed})
+		candidate.sequence = entry.sequence
+		candidate.discontinuity = candidate.discontinuity || changed
+		entry.segments = append(entry.segments, candidate)
 		changed = false
 		known[key] = len(entry.segments) - 1
-		date = ""
+	}
+	if len(entry.seenOrder) > 240 {
+		for _, key := range entry.seenOrder[:len(entry.seenOrder)-240] {
+			delete(entry.seen, key)
+		}
+		entry.seenOrder = append([]string(nil), entry.seenOrder[len(entry.seenOrder)-240:]...)
 	}
 	if len(entry.segments) == 0 {
 		return strings.ReplaceAll(body, "#EXT-X-ENDLIST", "")
 	}
 	if len(entry.segments) > 120 {
+		for _, removed := range entry.segments[:len(entry.segments)-120] {
+			if removed.discontinuity {
+				entry.discontinuities++
+			}
+		}
 		entry.segments = append([]segment(nil), entry.segments[len(entry.segments)-120:]...)
 	}
 	start := len(entry.segments) - 15
@@ -167,6 +203,15 @@ func (entry *playlistEntry) stitch(body, base string, plan Plan) string {
 		}
 	}
 	result := []string{"#EXTM3U", "#EXT-X-VERSION:3", fmt.Sprintf("#EXT-X-TARGETDURATION:%.0f", math.Ceil(target)), fmt.Sprintf("#EXT-X-MEDIA-SEQUENCE:%d", display[0].sequence)}
+	discontinuities := entry.discontinuities
+	for _, skipped := range entry.segments[:start] {
+		if skipped.discontinuity {
+			discontinuities++
+		}
+	}
+	if discontinuities > 0 {
+		result = append(result, fmt.Sprintf("#EXT-X-DISCONTINUITY-SEQUENCE:%d", discontinuities))
+	}
 	for _, value := range display {
 		if value.discontinuity {
 			result = append(result, "#EXT-X-DISCONTINUITY")
@@ -177,6 +222,31 @@ func (entry *playlistEntry) stitch(body, base string, plan Plan) string {
 		result = append(result, fmt.Sprintf("#EXTINF:%.3f,", value.duration), value.address)
 	}
 	return strings.Join(result, "\n") + "\n"
+}
+
+func segmentKey(address, date string) string {
+	if date != "" {
+		return "pdt:" + date
+	}
+	uri, _ := url.Parse(address)
+	if uri == nil {
+		return address
+	}
+	return uri.Scheme + "://" + uri.Host + uri.Path
+}
+
+func injectDiscontinuity(body string) string {
+	if strings.Contains(body, "#EXT-X-DISCONTINUITY\n") || strings.Contains(body, "#EXT-X-DISCONTINUITY\r\n") {
+		return body
+	}
+	lines := strings.Split(body, "\n")
+	for index, line := range lines {
+		if strings.HasPrefix(strings.TrimSpace(line), "#EXTINF:") || strings.HasPrefix(strings.TrimSpace(line), "#EXT-X-PROGRAM-DATE-TIME:") {
+			lines[index] = "#EXT-X-DISCONTINUITY\n" + line
+			return strings.Join(lines, "\n")
+		}
+	}
+	return body
 }
 func (s *Service) sendAsset(writer http.ResponseWriter, request *http.Request, id string) {
 	token, err := s.decodeAsset(id)
@@ -237,6 +307,8 @@ func (s *Service) sendAsset(writer http.ResponseWriter, request *http.Request, i
 	if !ranged && !strings.Contains(contentType, "mpegurl") && len(raw) <= 32<<20 {
 		s.mu.Lock()
 		if current := s.assets[id]; current == entry {
+			s.cacheBytes -= len(entry.data)
+			entry.data = nil
 			for s.cacheBytes+len(raw) > 64<<20 {
 				var oldestID string
 				var oldest time.Time
@@ -252,7 +324,6 @@ func (s *Service) sendAsset(writer http.ResponseWriter, request *http.Request, i
 				s.cacheBytes -= len(oldestEntry.data)
 				oldestEntry.data = nil
 			}
-			s.cacheBytes -= len(entry.data)
 			entry.data = raw
 			entry.contentType = contentType
 			s.cacheBytes += len(raw)
@@ -265,11 +336,18 @@ func (s *Service) sendAsset(writer http.ResponseWriter, request *http.Request, i
 }
 
 func (s *Service) subscription(request *http.Request) string {
+	s.mu.Lock()
+	port := s.settings.Port
+	s.mu.Unlock()
 	host := request.Host
 	if _, _, err := netSplitHost(host); err != nil {
-		host = "127.0.0.1:" + strconv.Itoa(s.settings.Port)
+		host = "127.0.0.1:" + strconv.Itoa(port)
 	}
-	base := "http://" + host
+	scheme := "http"
+	if request.TLS != nil || strings.EqualFold(strings.TrimSpace(strings.Split(request.Header.Get("X-Forwarded-Proto"), ",")[0]), "https") {
+		scheme = "https"
+	}
+	base := scheme + "://" + host
 	lines := []string{`#EXTM3U url-tvg="https://epg.zsdc.eu.org/t.xml.gz,https://epg.pw/xmltv/epg_CN.xml.gz" x-tvg-url="https://epg.zsdc.eu.org/t.xml.gz"`, "#EXT-X-APTV-PREVIEW: FALSE", "#EXT-X-APTV-LATENCY: FALSE", "#EXT-X-APTV-LOGO: FALSE"}
 	query := request.URL.Query()
 	group := query.Get("group")
@@ -288,7 +366,7 @@ func (s *Service) subscription(request *http.Request) string {
 }
 func netSplitHost(host string) (string, string, error) {
 	uri, err := url.Parse("http://" + host)
-	if err != nil || uri.Hostname() == "" || uri.Port() == "" || uri.Path != "" || uri.User != nil {
+	if err != nil || uri.Hostname() == "" || uri.Path != "" || uri.RawQuery != "" || uri.Fragment != "" || uri.User != nil {
 		return "", "", errors.New("请求主机无效")
 	}
 	return uri.Hostname(), uri.Port(), nil

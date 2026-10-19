@@ -130,23 +130,7 @@ func (d *deviceClient) makeDevice(last int64, day string, count int) deviceState
 }
 
 func (d *deviceClient) save() {
-	raw, err := json.Marshal(d.state)
-	if err != nil {
-		return
-	}
-	os.MkdirAll(filepath.Dir(d.path), 0700)
-	file, err := os.CreateTemp(filepath.Dir(d.path), ".device-")
-	if err != nil {
-		return
-	}
-	name := file.Name()
-	defer os.Remove(name)
-	file.Chmod(0600)
-	_, err = file.Write(raw)
-	closeErr := file.Close()
-	if err == nil && closeErr == nil {
-		os.Rename(name, d.path)
-	}
+	savePrivateJSON(d.path, d.state)
 }
 
 func javaHash(value string) int32 {
@@ -464,11 +448,7 @@ func (d *deviceClient) invalidate(id string) {
 }
 
 func (d *deviceClient) savePlans() {
-	raw, err := json.Marshal(d.plans)
-	if err != nil {
-		return
-	}
-	os.WriteFile(filepath.Join(filepath.Dir(d.path), "plans.json"), raw, 0600)
+	savePrivateJSON(filepath.Join(filepath.Dir(d.path), "plans.json"), d.plans)
 }
 
 func (d *deviceClient) lock(ctx context.Context) error {

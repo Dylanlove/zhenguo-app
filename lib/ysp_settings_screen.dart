@@ -128,7 +128,7 @@ class _YspSettingsScreenState extends State<YspSettingsScreen> {
                 ),
               const ListTile(
                 leading: Icon(Icons.live_tv),
-                title: Text('YSP Live 9.4'),
+                title: Text('YSP Live 9.5'),
                 subtitle: Text('64 路频道 · 四层取流兜底 · 高清 / 4K · 7 天回看'),
               ),
               if (status != null) ...[

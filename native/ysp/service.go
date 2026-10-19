@@ -37,8 +37,13 @@ type playlistEntry struct {
 	plan                         Plan
 	high                         Plan
 	promoting                    bool
+	promotion                    uint64
+	promoteCancel                context.CancelFunc
 	segments                     []segment
+	seen                         map[string]bool
+	seenOrder                    []string
 	sequence                     int64
+	discontinuities              int64
 	engine                       string
 }
 type asset struct {
@@ -70,6 +75,7 @@ type Service struct {
 	device     *deviceClient
 	proxy      cipher.AEAD
 	entries    map[string]*playlistEntry
+	foreground *playlistEntry
 	assets     map[string]*asset
 	cacheBytes int
 	log        []event
@@ -284,6 +290,10 @@ func (s *Service) Status() map[string]any {
 	return map[string]any{"ok": true, "version": Version, "running": address != "", "base": address, "settings": settings, "subscriptions": addresses, "uptimeSeconds": uptime, "channels": len(s.channels), "playing": playing, "events": log, "assets": assets, "segmentCacheBytes": cacheBytes, "deviceBusy": deviceBusy, "deviceSession": sessionReady, "deviceLinks": links, "heartbeatCount": heartbeats, "identityRotationsToday": rotations, "author": "Gary's Club", "community": "https://t.me/garysclub"}
 }
 func (s *Service) Command(command string, payload map[string]any) (any, error) {
+	if command == "idle" {
+		s.selectPlayback(nil)
+		return map[string]bool{"released": true}, nil
+	}
 	if command == "stop" {
 		s.Close()
 		return map[string]bool{"stopped": true}, nil
@@ -331,14 +341,21 @@ func (s *Service) Command(command string, payload map[string]any) (any, error) {
 		query := url.Values{"quality": {quality}}
 		start, end := int64(0), int64(0)
 		if value := text(payload["start"]); value != "" {
-			start, _ = strconv.ParseInt(value, 10, 64)
-			end, _ = strconv.ParseInt(text(payload["end"]), 10, 64)
+			start, err = catchupTime(value)
+			if err != nil {
+				return nil, err
+			}
+			end, err = catchupTime(text(payload["end"]))
+			if err != nil {
+				return nil, err
+			}
 			if err = validateCatchup(channel, start, end); err != nil {
 				return nil, err
 			}
 			query.Set("utc", strconv.FormatInt(start, 10))
 			query.Set("lutc", strconv.FormatInt(end, 10))
 		}
+		s.selectPlayback(s.getEntry(channel, quality, start, end))
 		return map[string]any{"url": base + "/live/" + channel.ID + ".m3u8?" + query.Encode(), "headers": map[string]string{}, "catchup": start > 0, "quality": quality}, nil
 	}
 	return nil, errors.New("央视频操作无效")
@@ -354,12 +371,24 @@ func validateCatchup(channel Channel, start, end int64) error {
 	return nil
 }
 func catchupTime(value string) (int64, error) {
-	digits := strings.Map(func(r rune) rune {
-		if r >= '0' && r <= '9' {
-			return r
+	value = strings.TrimSpace(value)
+	if parsed, err := time.Parse(time.RFC3339Nano, value); err == nil {
+		return parsed.Unix(), nil
+	}
+	zone := time.FixedZone("CST", 8*3600)
+	for _, format := range []string{"2006-01-02T15:04:05", "2006-01-02 15:04:05", "2006-01-02T15:04", "2006-01-02 15:04"} {
+		if parsed, err := time.ParseInLocation(format, value, zone); err == nil {
+			return parsed.Unix(), nil
 		}
-		return -1
-	}, value)
+	}
+	digits := value
+	if strings.HasSuffix(strings.ToUpper(digits), "Z") {
+		digits = digits[:len(digits)-1]
+		zone = time.UTC
+	}
+	if digits == "" || strings.IndexFunc(digits, func(r rune) bool { return r < '0' || r > '9' }) >= 0 {
+		return 0, errors.New("回看时间格式无效")
+	}
 	if len(digits) == 10 || len(digits) == 13 {
 		result, err := strconv.ParseInt(digits, 10, 64)
 		if len(digits) == 13 {
@@ -373,7 +402,7 @@ func catchupTime(value string) (int64, error) {
 	} else if len(digits) != 14 {
 		return 0, errors.New("回看时间格式无效")
 	}
-	result, err := time.ParseInLocation(format, digits, time.FixedZone("CST", 8*3600))
+	result, err := time.ParseInLocation(format, digits, zone)
 	return result.Unix(), err
 }
 func catchupQuery(query url.Values) (int64, int64, error) {
@@ -412,6 +441,24 @@ func catchupQuery(query url.Values) (int64, int64, error) {
 	return from, to, err
 }
 
+func (s *Service) selectPlayback(entry *playlistEntry) {
+	s.mu.Lock()
+	previous := s.foreground
+	s.foreground = entry
+	if previous != nil && previous != entry {
+		previous.mu.Lock()
+		previous.promotion++
+		if previous.promoteCancel != nil {
+			previous.promoteCancel()
+			previous.promoteCancel = nil
+		}
+		previous.promoting = false
+		previous.firstUsed = time.Time{}
+		previous.mu.Unlock()
+	}
+	s.mu.Unlock()
+}
+
 func (s *Service) getEntry(channel Channel, quality string, start, end int64) *playlistEntry {
 	key := channel.ID + "\x00" + quality + "\x00" + strconv.FormatInt(start, 10) + "\x00" + strconv.FormatInt(end, 10)
 	s.mu.Lock()
@@ -443,11 +490,15 @@ func (s *Service) Playlist(ctx context.Context, channel Channel, quality string,
 	entry := s.getEntry(channel, quality, start, end)
 	for attempt := 0; attempt < 2; attempt++ {
 		entry.mu.Lock()
+		if entry.firstUsed.IsZero() || time.Since(entry.lastUsed) > 15*time.Second {
+			entry.firstUsed = time.Now()
+		}
 		entry.lastUsed = time.Now()
 		cached, age := entry.text, time.Since(entry.updated)
 		if start == 0 && quality == "auto" && channel.LiveID != "" && !channel.Ultra && !entry.promoting && (entry.high.URL == "" || int64(entry.high.Expires) < time.Now().Unix()+60) && time.Since(entry.firstUsed) >= 10*time.Second {
 			entry.promoting = true
-			go s.promote(entry)
+			entry.promotion++
+			go s.promote(entry, entry.promotion)
 		}
 		if cached != "" && age < 2*time.Second {
 			entry.mu.Unlock()
@@ -482,24 +533,37 @@ func (s *Service) Playlist(ctx context.Context, channel Channel, quality string,
 	}
 	return "", errors.New("央视频播放列表暂不可用")
 }
-func (s *Service) promote(entry *playlistEntry) {
+func (s *Service) promote(entry *playlistEntry, generation uint64) {
 	s.mu.Lock()
 	parent := s.ctx
 	s.mu.Unlock()
 	ctx, cancel := context.WithTimeout(parent, 15*time.Second)
 	defer cancel()
+	entry.mu.Lock()
+	if generation != entry.promotion || time.Since(entry.lastUsed) >= 15*time.Second {
+		if generation == entry.promotion {
+			entry.promoting = false
+		}
+		entry.mu.Unlock()
+		return
+	}
+	entry.promoteCancel = cancel
+	entry.mu.Unlock()
 	plan, err := s.device.resolve(ctx, entry.channel)
 	if err == nil {
 		_, _, err = readPlaylist(ctx, s.client, plan)
 	}
 	entry.mu.Lock()
-	entry.promoting = false
-	if err == nil && time.Since(entry.lastUsed) < 15*time.Second {
-		entry.high = plan
-		entry.updated = time.Time{}
+	if generation == entry.promotion {
+		entry.promoting = false
+		entry.promoteCancel = nil
+		if err == nil && ctx.Err() == nil && time.Since(entry.lastUsed) < 15*time.Second {
+			entry.high = plan
+			entry.updated = time.Time{}
+		}
 	}
 	entry.mu.Unlock()
-	if err != nil {
+	if err != nil && ctx.Err() == nil {
 		s.record(entry.channel.ID, err)
 	}
 }

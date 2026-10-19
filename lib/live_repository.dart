@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'core_bridge.dart';
+import 'live_epg.dart';
 import 'live_http.dart';
 import 'live_models.dart';
 import 'live_parser.dart';
@@ -9,11 +10,13 @@ import 'live_sources.dart';
 import 'ysp_live.dart';
 
 class LiveRepository {
-  LiveRepository({LiveHttp? http, AppRepository? core})
+  LiveRepository({LiveHttp? http, AppRepository? core, LiveEpgRepository? epg})
     : _http = http ?? LiveHttp(),
+      epg = epg ?? LiveEpgRepository(),
       ysp = YspLiveClient(core ?? NativeRepository());
 
   final YspLiveClient ysp;
+  final LiveEpgRepository epg;
   List<LiveChannel>? _yspChannels;
 
   /// 已失效的分类：源站仍返回，但频道统一跳转到版权拦截页。
@@ -34,6 +37,7 @@ class LiveRepository {
   void dispose() {
     _generation++;
     _http.close();
+    epg.dispose();
     if (_yspChannels != null) {
       unawaited(ysp.stop().catchError((Object _) {}));
     }

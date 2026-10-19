@@ -316,7 +316,7 @@ class _LivePlayerScreenState extends State<LivePlayerScreen> {
               if (_playback.supportsCatchup)
                 ListTile(
                   leading: const Icon(Icons.replay),
-                  title: const Text('选择回看时间'),
+                  title: const Text('节目单与 7 天回看'),
                   onTap: () => Navigator.pop(context, 'catchup'),
                 ),
               if (_playback.catchup)
