@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -40,11 +39,14 @@ type nativeDownloadFileState struct {
 func (manager *nativeDownloads) transferMedia(ctx context.Context, job nativeDownloadJob, media providerMedia) (nativeDownloadResult, error) {
 	ctx = providerMediaContext(ctx, media.credentials)
 	bundle := nativeDownloadBundle{quality: media.Quality, playlists: map[string][]byte{}}
-	parsed, err := url.Parse(media.URL)
-	if err != nil || !isProviderHTTPMediaURL(media.URL) {
+	var err error
+	if !isProviderHTTPMediaURL(media.URL) {
 		return nativeDownloadResult{}, errors.New("下载地址无效")
 	}
-	hls := media.Playlist != "" || strings.HasSuffix(strings.ToLower(parsed.Path), ".m3u8")
+	if providerMediaDASHURL(media.URL) {
+		return nativeDownloadResult{}, errors.New("DASH 线路暂不支持离线下载，请切换 M3U8 或 MP4 线路")
+	}
+	hls := media.Playlist != "" || providerMediaHLSURL(media.URL)
 	entry := "media.mp4"
 	if hls {
 		bundle, err = manager.downloadBundle(ctx, media, job.Quality)

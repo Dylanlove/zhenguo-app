@@ -19,7 +19,7 @@ type providerTextUserAgentKey struct{}
 type providerTextNoCacheKey struct{}
 
 func isFilmProviderSource(source string) bool {
-	return source == sourceIkanbot || source == sourceA123
+	return source == sourceIkanbot || source == sourceA123 || source == sourceXiaopingguo || source == sourceMiguoHoney
 }
 
 func validFilmCategory(categories []nativeCategory, category string) bool {
@@ -240,7 +240,7 @@ func (d *Downloader) prepareWebProviderMedia(ctx context.Context, media provider
 	if err != nil || !isProviderHTTPMediaURL(media.URL) || address.User != nil {
 		return providerMedia{}, fmt.Errorf("%s未返回有效播放地址，请刷新详情后重试", sourceName)
 	}
-	if strings.HasSuffix(strings.ToLower(address.Path), ".m3u8") {
+	if providerMediaHLSURL(media.URL) {
 		if media.credentials != nil {
 			ctx = providerMediaContext(ctx, media.credentials)
 		}

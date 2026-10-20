@@ -170,7 +170,9 @@ class _HomeScreenState extends State<HomeScreen> {
     });
     if (!_showRecommendations &&
         _category.isNotEmpty &&
-        !_categories.any((entry) => entry.id == _category)) {
+        !_categories.any(
+          (entry) => entry.id == CatalogCategory.baseId(_category),
+        )) {
       _changeCategory('');
     }
   }
@@ -302,7 +304,7 @@ class _HomeScreenState extends State<HomeScreen> {
     if (velocity.abs() < 240) return;
     final categories = _displayCategories;
     final index = categories.indexWhere(
-      (entry) => entry.id == _displayCategory,
+      (entry) => entry.id == CatalogCategory.baseId(_displayCategory),
     );
     final next = index + (velocity < 0 ? 1 : -1);
     if (next >= 0 && next < categories.length) {

@@ -36,7 +36,11 @@ class SourceSite {
       capabilities?.onlineSearch ??
       (id == 'hongguo' || filmSource || pagedSearch);
   bool get filmSource =>
-      capabilities?.film ?? (id == 'ikanbot' || id == 'a123');
+      capabilities?.film ??
+      (id == 'ikanbot' ||
+          id == 'a123' ||
+          id == 'xiaopingguo' ||
+          id == 'miguo-honey');
   bool get pagedSearch =>
       capabilities?.searchPaging ??
       (id == 'hongguo' ||
@@ -44,6 +48,8 @@ class SourceSite {
           id == 'huangju' ||
           id == 'yeguo' ||
           id == 'dsd' ||
+          id == 'xiaopingguo' ||
+          id == 'miguo-honey' ||
           duanjuPaged);
   bool get duanjuPaged => const {
     'yaguo',
@@ -79,6 +85,17 @@ class SourceSite {
   static const hongguo = SourceSite('hongguo', '红果', '短剧 · 漫剧 · AI 剧');
   static const ikanbot = SourceSite('ikanbot', '爱看机器人', '电影 · 剧集 · 多线路');
   static const a123 = SourceSite('a123', 'A123TV', '电影 · 连续剧 · 综艺 · 动漫');
+  static const xiaopingguo = SourceSite(
+    'xiaopingguo',
+    '小苹果',
+    '电影 · 剧集 · 4K · 奈飞 · 多线路',
+  );
+  static const miguoHoney = SourceSite(
+    'miguo-honey',
+    '蜜果',
+    '视频 · 短剧 · 动漫 · 直播 · 多线路',
+    adult: true,
+  );
   static const dsd = SourceSite('dsd', '帝果', '懂色帝 · AV 网页目录', adult: true);
   static const duanjuValues = [
     SourceSite('yaguo', '芽果', '星芽短剧 · 登录接口'),
@@ -117,6 +134,8 @@ class SourceSite {
     ...duanjuValues,
     ikanbot,
     a123,
+    xiaopingguo,
+    miguoHoney,
   ];
   static final knownValues = List<SourceSite>.unmodifiable([
     ...allValues.where((site) => !site.adult),
@@ -151,15 +170,95 @@ class SourceGroup {
 }
 
 class CatalogCategory {
-  const CatalogCategory(this.id, this.name, {this.local = false});
+  const CatalogCategory(
+    this.id,
+    this.name, {
+    this.local = false,
+    this.filters = const [],
+  });
   static const all = CatalogCategory('', '全部');
   final String id;
   final String name;
   final bool local;
+  final List<CatalogCategoryFilter> filters;
+  static String baseId(String selection) => selection.split('?').first;
+  static Map<String, String> query(String selection) {
+    final position = selection.indexOf('?');
+    if (position < 0) return {};
+    try {
+      return Uri.splitQueryString(selection.substring(position + 1));
+    } on FormatException {
+      return {};
+    }
+  }
+
+  Map<String, String> filterValues(String selection) {
+    final selected = query(selection);
+    final values = <String, String>{};
+    for (final filter in filters) {
+      if (!filter.active(values)) continue;
+      final candidate = selected[filter.key] ?? filter.defaultValue;
+      values[filter.key] = filter.values.any((value) => value.id == candidate)
+          ? candidate
+          : filter.defaultValue;
+    }
+    return values;
+  }
+
+  String selection(Map<String, String> values) {
+    final active = <String, String>{};
+    final query = <String, String>{};
+    for (final filter in filters) {
+      if (!filter.active(active)) continue;
+      final value = values[filter.key] ?? filter.defaultValue;
+      active[filter.key] = value;
+      if (value != filter.defaultValue) query[filter.key] = value;
+    }
+    return query.isEmpty ? id : '$id?${Uri(queryParameters: query).query}';
+  }
+
   factory CatalogCategory.fromJson(Map<String, dynamic> json) =>
       CatalogCategory(
         json['id'] as String? ?? '',
         json['name'] as String? ?? '全部',
+        filters: [
+          for (final filter in json['filters'] as List? ?? const [])
+            if (filter is Map)
+              CatalogCategoryFilter.fromJson(Map<String, dynamic>.from(filter)),
+        ],
+      );
+}
+
+class CatalogCategoryFilter {
+  const CatalogCategoryFilter({
+    required this.key,
+    required this.name,
+    this.defaultValue = '',
+    required this.values,
+    this.parentKey = '',
+    this.parentValues = const [],
+  });
+
+  final String key, name, defaultValue, parentKey;
+  final List<CatalogCategory> values;
+  final List<String> parentValues;
+
+  bool active(Map<String, String> selected) =>
+      parentKey.isEmpty || parentValues.contains(selected[parentKey]);
+
+  factory CatalogCategoryFilter.fromJson(Map<String, dynamic> json) =>
+      CatalogCategoryFilter(
+        key: json['key'] as String? ?? '',
+        name: json['name'] as String? ?? '',
+        defaultValue: json['default'] as String? ?? '',
+        parentKey: json['parentKey'] as String? ?? '',
+        parentValues: (json['parentValues'] as List? ?? const [])
+            .cast<String>(),
+        values: [
+          for (final value in json['values'] as List? ?? const [])
+            if (value is Map)
+              CatalogCategory.fromJson(Map<String, dynamic>.from(value)),
+        ],
       );
 }
 

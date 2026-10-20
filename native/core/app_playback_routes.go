@@ -76,6 +76,17 @@ func (engine *nativeEngine) nativeOpenPlayback(ctx context.Context, choice nativ
 		Key: hex.EncodeToString(media.CENCKey), Quality: media.Quality, Qualities: choice.qualities,
 		RouteIndex: choice.index, RouteCount: len(choice.media), Session: hex.EncodeToString(tokenBytes),
 	}
+	if media.credentials != nil {
+		if media.credentials.userAgent != "" {
+			plan.Headers["User-Agent"] = media.credentials.userAgent
+		}
+		if media.credentials.referer != "" {
+			plan.Headers["Referer"] = media.credentials.referer
+		}
+		if media.credentials.omitReferer {
+			delete(plan.Headers, "Referer")
+		}
+	}
 	if media.RouteName != "" {
 		for _, option := range choice.media {
 			plan.RouteNames = append(plan.RouteNames, option.RouteName)
@@ -88,7 +99,7 @@ func (engine *nativeEngine) nativeOpenPlayback(ctx context.Context, choice nativ
 		plan.ExpiresAt = media.credentials.expires.UnixMilli()
 	}
 	choice.streamSession = ""
-	{
+	if !providerMediaDASHURL(media.URL) {
 		engine.mu.Lock()
 		if engine.stream == nil {
 			engine.stream, err = newNativeStreamServer(engine.downloader)

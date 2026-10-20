@@ -24,6 +24,7 @@ func nativeCapabilities(version string) []nativeSourceCapabilities {
 	for _, spec := range duanjuProviderCatalog {
 		sources = append(sources, spec.ID)
 	}
+	sources = append(sources, sourceXiaopingguo, sourceMiguoHoney)
 	items := []nativeSourceCapabilities{}
 	for _, source := range sources {
 		if !nativeSourceAvailable(source) {
@@ -32,7 +33,7 @@ func nativeCapabilities(version string) []nativeSourceCapabilities {
 		film := isFilmProviderSource(source)
 		item := nativeSourceCapabilities{ID: source, Categories: source != sourceHuangdou, CatalogPaging: true, Film: film}
 		switch source {
-		case sourceHongguo, sourceHuangguoAI, sourceHuangju, sourceYeguo, sourceDSD, sourceIkanbot, sourceA123:
+		case sourceHongguo, sourceHuangguoAI, sourceHuangju, sourceYeguo, sourceDSD, sourceIkanbot, sourceA123, sourceXiaopingguo, sourceMiguoHoney:
 			item.OnlineSearch, item.SearchPaging = true, true
 		}
 		if spec, found := duanjuSourceSpecFor(source); found {

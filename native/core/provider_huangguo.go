@@ -100,7 +100,7 @@ func splitProviderDramaID(id string) (source, sourceID string, ok bool) {
 
 func isHuangguoProviderSource(source string) bool {
 	switch canonicalProviderSource(source) {
-	case sourceHuangguoAI, sourceHuangguoVideo, sourceHuangdou, sourceHongguo, sourceHuangju, sourceYeguo, sourceDSD, sourceCloudFront, sourceIkanbot, sourceA123:
+	case sourceHuangguoAI, sourceHuangguoVideo, sourceHuangdou, sourceHongguo, sourceHuangju, sourceYeguo, sourceDSD, sourceCloudFront, sourceIkanbot, sourceA123, sourceXiaopingguo, sourceMiguoHoney:
 		return true
 	default:
 		return isDuanjuProviderSource(source)
@@ -128,6 +128,10 @@ func canonicalProviderSource(source string) string {
 		return sourceIkanbot
 	case "a123", "a123tv.com", "www.a123tv.com":
 		return sourceA123
+	case "xiaopingguo", "xpg", "122.228.193.211":
+		return sourceXiaopingguo
+	case "miguo-honey", "honeypeach", "mitaoline.com", "honeypeach.cc":
+		return sourceMiguoHoney
 	case "cloudfront":
 		return sourceCloudFront
 	}
@@ -246,6 +250,12 @@ func (d *Downloader) GetHuangguoChapters(ctx context.Context, source, sourceID s
 		return drama.DisplayTitle(), chapters, err
 	case sourceA123:
 		drama, chapters, err := d.fetchA123Detail(ctx, sourceID)
+		return drama.DisplayTitle(), chapters, err
+	case sourceXiaopingguo:
+		drama, chapters, err := d.fetchXiaopingguoDetail(ctx, sourceID)
+		return drama.DisplayTitle(), chapters, err
+	case sourceMiguoHoney:
+		drama, chapters, err := d.fetchMiguoHoneyDetail(ctx, sourceID)
 		return drama.DisplayTitle(), chapters, err
 	case sourceCloudFront:
 		return d.fetchLegacyChapters(ctx, sourceID)

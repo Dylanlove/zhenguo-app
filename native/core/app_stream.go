@@ -189,7 +189,7 @@ func (stream *nativeStreamServer) nativeOpen(media providerMedia) (string, strin
 	stream.sessions[token] = session
 	stream.mu.Unlock()
 	entry := nativeStreamAsset{address: media.URL, contentType: "video/mp4"}
-	if parsed, err := url.Parse(media.URL); err == nil && strings.HasSuffix(strings.ToLower(parsed.Path), ".m3u8") {
+	if providerMediaHLSURL(media.URL) {
 		entry.contentType = "application/vnd.apple.mpegurl"
 	}
 	entry.fallbacks = nativeMediaURLFallbacks(media.URL)

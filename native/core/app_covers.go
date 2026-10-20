@@ -83,6 +83,9 @@ func newNativeCoverCache(directory string, downloader *Downloader) *nativeCoverC
 }
 
 func nativeCoverReferer(downloader *Downloader, source, address string) string {
+	if source == sourceMiguoHoney {
+		return miguoHoneyReferer
+	}
 	if isFilmProviderSource(source) {
 		if parsed, err := url.Parse(address); err == nil {
 			host := strings.ToLower(parsed.Hostname())

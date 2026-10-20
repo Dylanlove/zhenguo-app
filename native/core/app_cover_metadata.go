@@ -57,6 +57,12 @@ func (d *Downloader) nativeCoverAddress(ctx context.Context, drama nativeDrama) 
 	case sourceA123:
 		fresh, _, err := d.fetchA123Detail(ctx, id)
 		return nativeNormalize(fresh).Cover, err
+	case sourceXiaopingguo:
+		fresh, _, err := d.fetchXiaopingguoDetail(ctx, id)
+		return nativeNormalize(fresh).Cover, err
+	case sourceMiguoHoney:
+		fresh, _, err := d.fetchMiguoHoneyDetail(ctx, id)
+		return nativeNormalize(fresh).Cover, err
 	default:
 		if isDuanjuProviderSource(source) {
 			fresh, _, err := d.fetchDuanjuDetail(ctx, source, id)

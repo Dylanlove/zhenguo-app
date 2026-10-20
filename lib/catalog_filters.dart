@@ -43,11 +43,12 @@ class _CatalogFiltersState extends State<CatalogFilters> {
   final _anchors = <String, GlobalKey>{};
 
   bool _isSelected(String id) =>
-      widget.selected?.contains(id) ?? id == widget.category;
+      widget.selected?.contains(id) ??
+      id == CatalogCategory.baseId(widget.category);
 
   int get _selectedIndex {
     final index = widget.categories.indexWhere(
-      (entry) => entry.id == widget.category,
+      (entry) => entry.id == CatalogCategory.baseId(widget.category),
     );
     return index < 0 ? 0 : index;
   }
@@ -57,7 +58,8 @@ class _CatalogFiltersState extends State<CatalogFilters> {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.category != widget.category) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        final anchor = _anchors[widget.category]?.currentContext;
+        final anchor =
+            _anchors[CatalogCategory.baseId(widget.category)]?.currentContext;
         if (mounted && anchor != null) {
           Scrollable.ensureVisible(
             anchor,
@@ -69,9 +71,109 @@ class _CatalogFiltersState extends State<CatalogFilters> {
     }
   }
 
+  Future<void> _showFilters(CatalogCategory category) async {
+    var values = category.filterValues(widget.category);
+    final result = await showModalBottomSheet<String>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      builder: (context) => FractionallySizedBox(
+        heightFactor: .85,
+        child: StatefulBuilder(
+          builder: (context, update) => SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          '${category.name}筛选',
+                          style: Theme.of(context).textTheme.titleLarge,
+                        ),
+                      ),
+                      TextButton(
+                        onPressed: () => update(
+                          () => values = category.filterValues(category.id),
+                        ),
+                        child: const Text('重置'),
+                      ),
+                      IconButton(
+                        tooltip: '关闭',
+                        onPressed: () => Navigator.pop(context),
+                        icon: const Icon(Icons.close_rounded),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Expanded(
+                    child: SingleChildScrollView(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          for (final filter in category.filters)
+                            if (filter.active(values)) ...[
+                              Text(
+                                filter.name,
+                                style: Theme.of(context).textTheme.titleMedium,
+                              ),
+                              const SizedBox(height: 8),
+                              Wrap(
+                                spacing: 8,
+                                runSpacing: 8,
+                                children: [
+                                  for (final option in filter.values)
+                                    ChoiceChip(
+                                      label: Text(option.name),
+                                      selected: values[filter.key] == option.id,
+                                      onSelected: (_) => update(() {
+                                        values[filter.key] = option.id;
+                                        for (final dependent
+                                            in category.filters) {
+                                          if (dependent.parentKey ==
+                                              filter.key) {
+                                            values.remove(dependent.key);
+                                          }
+                                        }
+                                        values = category.filterValues(
+                                          category.selection(values),
+                                        );
+                                      }),
+                                    ),
+                                ],
+                              ),
+                              const SizedBox(height: 20),
+                            ],
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  FilledButton(
+                    onPressed: () =>
+                        Navigator.pop(context, category.selection(values)),
+                    child: const Text('应用筛选'),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    if (mounted && result != null) widget.onCategory(result);
+  }
+
   @override
   Widget build(BuildContext context) {
     final television = AppLayout.isTelevision(context);
+    final current = widget.categories
+        .where(
+          (category) => category.id == CatalogCategory.baseId(widget.category),
+        )
+        .firstOrNull;
     return SizedBox(
       height: television
           ? 64
@@ -82,13 +184,27 @@ class _CatalogFiltersState extends State<CatalogFilters> {
             child: television
                 ? RemoteRow(
                     key: widget.remoteKey,
-                    itemKeys: [for (final entry in widget.categories) entry.id],
+                    itemKeys: [
+                      for (final entry in widget.categories) entry.id,
+                      if (current != null && current.filters.isNotEmpty)
+                        'category-filter',
+                    ],
                     padding: const EdgeInsets.symmetric(horizontal: 12),
                     initialIndex: _selectedIndex,
                     autofocus: widget.remoteAutofocus,
                     onExitUp: widget.onExitUp,
                     onExitDown: widget.onExitDown,
                     itemBuilder: (_, index, node, onFocus) {
+                      if (index == widget.categories.length &&
+                          current != null) {
+                        return RemoteButton(
+                          key: const ValueKey('remote-category-filter'),
+                          label: '筛选',
+                          focusNode: node,
+                          onFocus: onFocus,
+                          onPressed: () => _showFilters(current),
+                        );
+                      }
                       final entry = widget.categories[index];
                       return KeyedSubtree(
                         key: _anchors.putIfAbsent(entry.id, GlobalKey.new),
@@ -128,6 +244,16 @@ class _CatalogFiltersState extends State<CatalogFilters> {
                     ),
                   ),
           ),
+          if (!television && current != null && current.filters.isNotEmpty)
+            IconButton(
+              tooltip: '分类筛选',
+              onPressed: () => _showFilters(current),
+              icon: Icon(
+                CatalogCategory.query(widget.category).isEmpty
+                    ? Icons.filter_alt_outlined
+                    : Icons.filter_alt_rounded,
+              ),
+            ),
           if (widget.error != null)
             IconButton(
               tooltip: widget.error,

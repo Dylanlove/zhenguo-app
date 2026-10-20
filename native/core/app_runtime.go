@@ -34,6 +34,8 @@ type Config struct {
 	DSDURL           string
 	IkanbotURL       string
 	A123URL          string
+	XiaopingguoURL   string
+	MiguoHoneyURL    string
 	Token            string
 	AESKeyHex        string
 	InterfaceKey     string
@@ -72,6 +74,10 @@ type Downloader struct {
 	previewSessions        map[string]*huangguoPreviewSession
 	filmSessionOnce        sync.Once
 	filmSession            *Downloader
+	xiaopingguoOnce        sync.Once
+	xiaopingguoDevice      string
+	xiaopingguoDeviceError error
+	miguoHoney             miguoHoneySession
 }
 
 func defaultConfig() Config { return Config{MaxPagesPerSort: 50, PageSize: 30, Retries: 2} }
@@ -280,6 +286,9 @@ func newNativeEngine(directory string) (*nativeEngine, error) {
 			}
 			if len(via) > 0 && !strings.EqualFold(request.URL.Host, via[0].URL.Host) {
 				request.Header.Del("X-Preview-Token")
+				for _, header := range []string{"X-Hp-Sid", "X-Hp-Ts", "X-Hp-Nonce", "X-Hp-Sign", "publicParams"} {
+					request.Header.Del(header)
+				}
 			}
 			return nil
 		}}
@@ -652,13 +661,21 @@ func (engine *nativeEngine) nativeCatalog(ctx context.Context, input nativeInput
 	if query != "" && isFilmProviderSource(source) {
 		var items []Drama
 		var err error
-		if source == sourceIkanbot {
+		switch source {
+		case sourceXiaopingguo:
+			items, result.HasMore, err = d.fetchXiaopingguoCatalogPage(ctx, page, "", query)
+		case sourceMiguoHoney:
+			items, result.HasMore, err = d.fetchMiguoHoneyCatalogPage(ctx, page, "", query)
+		case sourceIkanbot:
 			items, result.HasMore, err = d.fetchIkanbotCatalogPage(ctx, page, "", query)
-		} else {
+		case sourceA123:
 			items, result.HasMore, err = d.fetchA123CatalogPage(ctx, page, "", query)
 		}
-		if err != nil {
+		if err != nil && len(items) == 0 {
 			return result, err
+		}
+		if err != nil {
+			result.Warning = publicError(err).Error()
 		}
 		for _, drama := range items {
 			result.Items = append(result.Items, nativeNormalize(drama))
@@ -755,6 +772,10 @@ func (engine *nativeEngine) nativeCatalog(ctx context.Context, input nativeInput
 		items, result.HasMore, err = d.fetchIkanbotCatalogPage(ctx, page, category, "")
 	case sourceA123:
 		items, result.HasMore, err = d.fetchA123CatalogPage(ctx, page, category, "")
+	case sourceXiaopingguo:
+		items, result.HasMore, err = d.fetchXiaopingguoCatalogPage(ctx, page, category, "")
+	case sourceMiguoHoney:
+		items, result.HasMore, err = d.fetchMiguoHoneyCatalogPage(ctx, page, category, "")
 	case sourceHuangguoVideo:
 		address := fmt.Sprintf("%s/videos?page=%d", d.providerBaseURL(source), page)
 		if category != "" {
@@ -826,6 +847,10 @@ func (engine *nativeEngine) nativeDetail(ctx context.Context, drama nativeDrama)
 		raw, chapters, err = engine.downloader.fetchIkanbotDetail(ctx, sourceID)
 	case sourceA123:
 		raw, chapters, err = engine.downloader.fetchA123Detail(ctx, sourceID)
+	case sourceXiaopingguo:
+		raw, chapters, err = engine.downloader.fetchXiaopingguoDetail(ctx, sourceID)
+	case sourceMiguoHoney:
+		raw, chapters, err = engine.downloader.fetchMiguoHoneyDetail(ctx, sourceID)
 	default:
 		if isDuanjuProviderSource(source) {
 			raw, chapters, err = engine.downloader.fetchDuanjuDetail(ctx, source, sourceID)
