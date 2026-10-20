@@ -695,6 +695,9 @@ class TelevisionSettingsDialog extends StatelessWidget {
     required this.qualities,
     required this.favorite,
     required this.onFavorite,
+    this.sourceQuality = 0,
+    this.actualResolution,
+    this.local = false,
     this.autoAdvance = true,
     this.showDanmaku = false,
     this.danmakuStatus = '',
@@ -711,6 +714,9 @@ class TelevisionSettingsDialog extends StatelessWidget {
   });
   final double speed;
   final int quality;
+  final int sourceQuality;
+  final String? actualResolution;
+  final bool local;
   final List<int> qualities;
   final bool favorite;
   final VoidCallback onFavorite;
@@ -760,6 +766,21 @@ class TelevisionSettingsDialog extends StatelessWidget {
             const SizedBox(height: 20),
             const Text('清晰度', style: TextStyle(fontSize: 18)),
             const SizedBox(height: 8),
+            Text(
+              actualResolution == null ? '实际分辨率待识别' : '实际播放：$actualResolution',
+              style: const TextStyle(fontSize: 14),
+            ),
+            if (local || sourceQuality > 0)
+              Text(
+                local ? '本集正在播放本地文件，画质偏好用于后续在线播放。' : '源站档位：${sourceQuality}P',
+                style: const TextStyle(fontSize: 14),
+              ),
+            const SizedBox(height: 8),
+            Text(
+              '画质偏好：${quality == 0 ? '自动（优先高清）' : '${quality}P'}',
+              style: const TextStyle(fontSize: 14),
+            ),
+            const SizedBox(height: 8),
             Wrap(
               spacing: 8,
               runSpacing: 8,
@@ -779,6 +800,16 @@ class TelevisionSettingsDialog extends StatelessWidget {
                   ),
               ],
             ),
+            if (quality > 0 && !qualities.contains(quality))
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Text(
+                  qualities.any((value) => value > 0)
+                      ? '已保存 ${quality}P 偏好，本集暂无此画质。'
+                      : '已保存 ${quality}P 偏好，本集未提供可切换的清晰度档位。',
+                  style: const TextStyle(fontSize: 14),
+                ),
+              ),
             const SizedBox(height: 20),
             if (onRoute != null && routeCount > 1) ...[
               const Text('播放线路', style: TextStyle(fontSize: 18)),

@@ -63,7 +63,7 @@ void main() {
             currentIndex: 0,
             preferences: const PlaybackPreferences(),
             qualities: const [720],
-            actualQuality: 720,
+            sourceQuality: 720,
             local: false,
             favorite: false,
             mobile: true,

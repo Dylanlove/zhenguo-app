@@ -20,13 +20,14 @@ class PlayerMenu extends StatefulWidget {
     required this.currentIndex,
     required this.preferences,
     required this.qualities,
-    required this.actualQuality,
+    required this.sourceQuality,
     required this.local,
     required this.favorite,
     required this.mobile,
     required this.onEpisode,
     required this.onPreferences,
     required this.onFavorite,
+    this.actualResolution,
     this.showDanmaku = false,
     this.danmakuStatus = '',
     this.onDanmakuSettings,
@@ -49,7 +50,8 @@ class PlayerMenu extends StatefulWidget {
   final int currentIndex;
   final PlaybackPreferences preferences;
   final List<int> qualities;
-  final int actualQuality;
+  final int sourceQuality;
+  final String? actualResolution;
   final bool local;
   final bool favorite;
   final bool mobile;
@@ -241,11 +243,21 @@ class _PlayerMenuState extends State<PlayerMenu> {
           const Text('清晰度'),
           const SizedBox(height: 8),
           Text(
-            widget.local
-                ? '本集正在播放本地原画，画质偏好用于后续在线播放。'
-                : widget.actualQuality > 0
-                ? '当前播放 ${widget.actualQuality}P'
-                : '使用源站可用画质',
+            widget.actualResolution == null
+                ? '实际分辨率待识别'
+                : '实际播放：${widget.actualResolution}',
+            style: helperStyle,
+          ),
+          if (widget.local || widget.sourceQuality > 0)
+            Text(
+              widget.local
+                  ? '本集正在播放本地文件，画质偏好用于后续在线播放。'
+                  : '源站档位：${widget.sourceQuality}P',
+              style: helperStyle,
+            ),
+          const SizedBox(height: 8),
+          Text(
+            '画质偏好：${preferences.quality == 0 ? '自动（优先高清）' : '${preferences.quality}P'}',
             style: helperStyle,
           ),
           const SizedBox(height: 8),
@@ -272,7 +284,9 @@ class _PlayerMenuState extends State<PlayerMenu> {
             Padding(
               padding: const EdgeInsets.only(top: 8),
               child: Text(
-                '已保存 ${preferences.quality}P 偏好，本集暂无此画质。',
+                widget.qualities.any((quality) => quality > 0)
+                    ? '已保存 ${preferences.quality}P 偏好，本集暂无此画质。'
+                    : '已保存 ${preferences.quality}P 偏好，本集未提供可切换的清晰度档位。',
                 style: helperStyle,
               ),
             ),

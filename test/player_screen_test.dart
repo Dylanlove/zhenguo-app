@@ -67,6 +67,7 @@ void main() {
     Size? size,
     FakeViewPadding? padding,
     ThemeData? theme,
+    int quality = 0,
   }) async {
     SharedPreferences.setMockInitialValues({});
     if (size != null) {
@@ -78,6 +79,11 @@ void main() {
       tester.view.viewPadding = padding;
     }
     final store = LocalStore(await SharedPreferences.getInstance());
+    if (quality > 0) {
+      await store.setPlaybackPreferences(
+        store.playbackPreferences.copyWith(quality: quality),
+      );
+    }
     final detail = await repository.detail(FixtureRepository.free);
     await tester.pumpWidget(
       MaterialApp(
@@ -107,6 +113,48 @@ void main() {
     expect(player.disposed, isTrue);
     expect(tester.takeException(), isNull);
   }
+
+  testWidgets(
+    'decoded resolution overrides stored quality and updates the open panel',
+    (tester) async {
+      final repository = RouteRepository();
+      final player = ScriptedPlayer();
+      await mount(tester, repository, player, quality: 1080);
+      final qualityButton = find.byKey(const ValueKey('player-quality'));
+      expect(
+        find.descendant(of: qualityButton, matching: find.text('1080P')),
+        findsNothing,
+      );
+      player.videoParamsController.add(
+        const VideoParams(w: 406, h: 720, dw: 1080, dh: 1920),
+      );
+      await settleOperations(tester);
+      expect(
+        find.descendant(of: qualityButton, matching: find.text('406×720')),
+        findsOneWidget,
+      );
+      await tester.tap(qualityButton);
+      await tester.pumpAndSettle();
+      expect(find.text('实际播放：406×720'), findsOneWidget);
+      expect(find.text('画质偏好：1080P'), findsOneWidget);
+      player.videoSize(1280, 720);
+      await settleOperations(tester);
+      expect(find.text('实际播放：1280×720'), findsOneWidget);
+      expect(find.text('实际播放：406×720'), findsNothing);
+      await tester.tap(find.byKey(const ValueKey('menu-quality-720')));
+      await settleOperations(tester);
+      expect(repository.requestedQualities.last, 720);
+      expect(find.text('实际分辨率待识别'), findsOneWidget);
+      expect(find.text('实际播放：1280×720'), findsNothing);
+      player.videoSize(852, 480);
+      await settleOperations(tester);
+      expect(find.text('实际播放：852×480'), findsOneWidget);
+      expect(find.text('画质偏好：720P'), findsOneWidget);
+      await tester.tap(find.byTooltip('关闭菜单'));
+      await tester.pumpAndSettle();
+      await unmount(tester, player);
+    },
+  );
 
   testWidgets(
     'duplicate errors switch once while keeping progress, rate and pause state',

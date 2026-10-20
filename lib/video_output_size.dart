@@ -5,6 +5,13 @@ import 'package:flutter/services.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 
+Size? videoDecodedSize(VideoParams parameters) {
+  final width = parameters.w ?? 0;
+  final height = parameters.h ?? 0;
+  if (width <= 0 || height <= 0) return null;
+  return Size(width.toDouble(), height.toDouble());
+}
+
 Size? videoDisplaySize(VideoParams parameters) {
   final width = (parameters.dw ?? 0) > 0 ? parameters.dw! : parameters.w ?? 0;
   final height = (parameters.dh ?? 0) > 0 ? parameters.dh! : parameters.h ?? 0;

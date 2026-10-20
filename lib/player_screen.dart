@@ -150,6 +150,7 @@ class _PlayerScreenState extends State<PlayerScreen>
   int _openedIndex = -1;
   int _generation = 0;
   int _requestedQuality = 0;
+  Size? _decodedVideoSize;
   bool _loading = true;
   bool _buffering = false;
   bool _forceOnline = false;
@@ -223,11 +224,13 @@ class _PlayerScreenState extends State<PlayerScreen>
         preload: _preloadEnabled,
         enhancement: _enhancement.preferences,
       );
-  String get _qualityLabel => _plan?.local == true
-      ? '本地原画'
-      : _requestedQuality == 0
-      ? '自动'
-      : '${_requestedQuality}P';
+  String? get _decodedResolution {
+    final size = _decodedVideoSize;
+    return size == null ? null : '${size.width.round()}×${size.height.round()}';
+  }
+
+  String get _qualityLabel =>
+      _decodedResolution ?? (_plan?.local == true ? '本地原画' : '清晰度');
   String get _session => _plan?.session ?? '';
   double get _currentPosition =>
       _openedIndex == _index && _player.state.position.inMilliseconds > 0
@@ -510,11 +513,25 @@ class _PlayerScreenState extends State<PlayerScreen>
     }
     _subscriptions.add(
       _player.stream.videoParams.listen((parameters) {
+        if (!mounted || _closed || !_acceptErrors) return;
         final size = videoDisplaySize(parameters);
-        if (size != null && mounted && !_closed) {
-          setState(() {
-            _aspectRatio = size.width / size.height;
-          });
+        final decoded = videoDecodedSize(parameters);
+        final changed = decoded != _decodedVideoSize;
+        setState(() {
+          _decodedVideoSize = decoded;
+          if (size != null) _aspectRatio = size.width / size.height;
+        });
+        if (changed) {
+          _menuRevision.value++;
+          if (decoded != null) {
+            _recordPlayback(
+              '视频分辨率',
+              state: 'ok',
+              message: '实际分辨率 $_decodedResolution',
+            );
+          }
+        }
+        if (size != null) {
           _scheduleSystemUi();
           unawaited(_syncPictureInPictureParams());
         }
@@ -1518,9 +1535,11 @@ class _PlayerScreenState extends State<PlayerScreen>
     _takingPreload = true;
     setState(() {
       _loading = true;
+      _decodedVideoSize = null;
       _error = null;
       _loadingMessage = '正在准备播放';
     });
+    _menuRevision.value++;
     final warmed =
         handoffPlan ??
         (recoveryAction == null &&
@@ -2085,7 +2104,8 @@ class _PlayerScreenState extends State<PlayerScreen>
               currentIndex: _index,
               preferences: _preferences,
               qualities: _plan?.qualities ?? [],
-              actualQuality: _plan?.quality ?? 0,
+              sourceQuality: _loading ? 0 : _plan?.quality ?? 0,
+              actualResolution: _decodedResolution,
               routeIndex: _plan?.routeIndex ?? 0,
               routeLabel: _plan?.routeLabel,
               routeCount: _plan?.routeCount ?? 0,
@@ -2269,12 +2289,15 @@ class _PlayerScreenState extends State<PlayerScreen>
       selection = await showDialog<TelevisionPlaybackSetting>(
         context: context,
         builder: (menuContext) => AnimatedBuilder(
-          animation: Listenable.merge([_danmaku, _preloader]),
+          animation: Listenable.merge([_menuRevision, _danmaku, _preloader]),
           builder: (_, _) => Theme(
             data: televisionTheme(AppTheme.dark),
             child: TelevisionSettingsDialog(
               speed: _speed,
               quality: _requestedQuality,
+              sourceQuality: _loading ? 0 : _plan?.quality ?? 0,
+              actualResolution: _decodedResolution,
+              local: _plan?.local == true,
               routeIndex: _plan?.routeIndex ?? 0,
               routeLabel: _plan?.routeLabel,
               routeCount: _plan?.routeCount ?? 0,

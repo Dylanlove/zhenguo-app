@@ -251,5 +251,8 @@ func (d *Downloader) resolveProviderMedia(ctx context.Context, task Task) (provi
 		}
 		media = selected
 	}
+	if chapter.Source == sourceHuangguoAI || chapter.Source == sourceHuangguoVideo {
+		media = huangguoMediaQualities(media)
+	}
 	return media, nil
 }

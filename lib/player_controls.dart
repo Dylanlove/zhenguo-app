@@ -1002,6 +1002,8 @@ class _PlayerControlsState extends State<PlayerControls> {
     onPressed: widget.enabled ? () => _panel(widget.onCatchup!) : null,
   );
 
+  double get _qualityToolWidth => widget.qualityLabel.contains('×') ? 96 : 52;
+
   Widget _desktopControlRow({
     required bool fullscreen,
     required bool compact,
@@ -1028,7 +1030,7 @@ class _PlayerControlsState extends State<PlayerControls> {
           tooltip: '清晰度',
           label: widget.qualityLabel,
           onPressed: widget.enabled ? () => _panel(widget.onQuality) : null,
-          width: 52,
+          width: _qualityToolWidth,
         ),
       ],
       if (showPush) _lanPushTool(const ValueKey('fullscreen-lan-push')),
@@ -1075,7 +1077,7 @@ class _PlayerControlsState extends State<PlayerControls> {
         tools,
         compact: compact,
         toolsWidth:
-            (showSpeedQuality ? 118 : 0) +
+            (showSpeedQuality ? 66 + _qualityToolWidth : 0) +
             48.0 *
                 ((widget.onSleepTimer != null ? 1 : 0) +
                     (widget.onCatchup != null ? 1 : 0) +
@@ -1107,7 +1109,7 @@ class _PlayerControlsState extends State<PlayerControls> {
         tooltip: '清晰度',
         label: widget.qualityLabel,
         onPressed: widget.enabled ? () => _panel(widget.onQuality) : null,
-        width: 52,
+        width: _qualityToolWidth,
       ),
       if (widget.onPush != null)
         _lanPushTool(const ValueKey('fullscreen-lan-push')),
@@ -1134,7 +1136,8 @@ class _PlayerControlsState extends State<PlayerControls> {
         tools,
         compact: compact,
         toolsWidth:
-            118 +
+            66 +
+            _qualityToolWidth +
             48.0 *
                 ((widget.onSleepTimer != null ? 1 : 0) +
                     (widget.onCatchup != null ? 1 : 0) +

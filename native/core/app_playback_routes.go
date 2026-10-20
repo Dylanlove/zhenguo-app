@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"sort"
+	"strconv"
 	"time"
 )
 
@@ -26,7 +27,7 @@ func nativePlaybackChoices(media providerMedia, quality int) nativePlaybackChoic
 		if !isProviderHTTPMediaURL(option.URL) {
 			continue
 		}
-		identity := option.URL + "\x00" + option.Referer + "\x00" + hex.EncodeToString(option.CENCKey) + "\x00" + hex.EncodeToString(option.HLSKey) + "\x00" + option.RouteName
+		identity := option.URL + "\x00" + option.Referer + "\x00" + hex.EncodeToString(option.CENCKey) + "\x00" + hex.EncodeToString(option.HLSKey) + "\x00" + option.RouteName + "\x00" + strconv.Itoa(option.Quality)
 		if seen[identity] {
 			continue
 		}
