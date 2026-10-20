@@ -12,6 +12,8 @@ import (
 	"time"
 )
 
+const hongguoAppCatalogPath = "/reading/distribution/category/landpage/v/"
+
 var hongguoAppGenres = []struct {
 	key   string
 	scene string
@@ -27,6 +29,8 @@ type libraryMoreKey struct{}
 type libraryScanKey struct{}
 
 type libraryKnownKey struct{}
+
+type hongguoCatalogProbeKey struct{}
 
 func (downloader *Downloader) fetchHongguoAppCatalog(ctx context.Context) ([]Drama, error) {
 	return downloader.fetchHongguoAppCatalogCategory(ctx, "")
@@ -56,6 +60,7 @@ func (downloader *Downloader) fetchHongguoAppCatalogCategory(ctx context.Context
 	defer client.catalogMu.Unlock()
 	more, _ := ctx.Value(libraryMoreKey{}).(bool)
 	fullScan, _ := ctx.Value(libraryScanKey{}).(bool)
+	probe, _ := ctx.Value(hongguoCatalogProbeKey{}).(bool)
 	known, _ := ctx.Value(libraryKnownKey{}).(map[string]bool)
 	state := downloader.hongguoCatalogSnapshot()
 	pageLimit := downloader.cfg.MaxPagesPerSort
@@ -64,6 +69,9 @@ func (downloader *Downloader) fetchHongguoAppCatalogCategory(ctx context.Context
 	}
 	if pageLimit > 200 {
 		pageLimit = 200
+	}
+	if probe {
+		pageLimit = 1
 	}
 	headLimit := min(pageLimit, 3)
 	type feedScan struct {
@@ -76,6 +84,9 @@ func (downloader *Downloader) fetchHongguoAppCatalogCategory(ctx context.Context
 	scans := make([]feedScan, len(genres))
 	for index, genre := range genres {
 		cursor := state.Feeds[feedKey(genre.key)]
+		if probe {
+			cursor = hongguoCatalogCursor{}
+		}
 		if !more && cursor.Initialized && !fullScan {
 			scans[index].head = true
 			scans[index].tail = cursor
@@ -88,6 +99,9 @@ func (downloader *Downloader) fetchHongguoAppCatalogCategory(ctx context.Context
 	var dramas []Drama
 	var failures []error
 	stopFeed := func(key, reason string) {
+		if probe {
+			return
+		}
 		client.mu.Lock()
 		cursor := client.state.Feeds[key]
 		if !cursor.Exhausted {
@@ -141,7 +155,7 @@ func (downloader *Downloader) fetchHongguoAppCatalogCategory(ctx context.Context
 			var pageErr error
 			newItems := 0
 			for attempt := 0; attempt < 2; attempt++ {
-				result, err := downloader.hongguoAppRequest(ctx, http.MethodPost, "/reading/distribution/category/landpage/v/", nil, payload)
+				result, err := downloader.hongguoAppRequest(ctx, http.MethodPost, hongguoAppCatalogPath, nil, payload)
 				retryable := err == nil || cursor.SessionID != ""
 				items = nil
 				if err == nil {
@@ -168,6 +182,11 @@ func (downloader *Downloader) fetchHongguoAppCatalogCategory(ctx context.Context
 				if attempt > 0 || !retryable || errors.As(err, &backoff) || ctx.Err() != nil {
 					break
 				}
+				select {
+				case <-time.After(time.Second):
+				case <-ctx.Done():
+					return interrupt(ctx.Err())
+				}
 				payload["session_id"] = ""
 			}
 			if err := ctx.Err(); err != nil {
@@ -193,9 +212,11 @@ func (downloader *Downloader) fetchHongguoAppCatalogCategory(ctx context.Context
 			if scan.head && (scan.done || scan.pages >= headLimit) {
 				scan.done = true
 			}
-			client.mu.Lock()
-			client.state.Feeds[feedKey(genre.key)] = checkpoint
-			client.mu.Unlock()
+			if !probe {
+				client.mu.Lock()
+				client.state.Feeds[feedKey(genre.key)] = checkpoint
+				client.mu.Unlock()
+			}
 			reportLibraryProgress(ctx, sourceHongguo, items, nil, false)
 		}
 		if !active {
