@@ -71,6 +71,8 @@ class SourceCatalogScan {
   final String state;
   final DateTime? startedAt;
   final List<SourceCatalogFeed> feeds;
+
+  int get pages => feeds.fold(0, (total, feed) => total + feed.pages);
 }
 
 class SourceStatus {
@@ -90,6 +92,7 @@ class SourceStatus {
       error = json['error'] as String? ?? '',
       storageError = json['storageError'] as String? ?? '',
       startedAt = sourceTime(json['startedAt']),
+      deadlineAt = sourceTime(json['deadlineAt']),
       finishedAt = sourceTime(json['finishedAt']),
       retryAt = sourceTime(json['retryAt']),
       catalogScan = json['catalogScan'] is Map
@@ -106,9 +109,16 @@ class SourceStatus {
   final String source, operation, stage, error, storageError;
   final int count, page, completed, total, added, unknownVip;
   final bool hasMore, running;
-  final DateTime? updatedAt, startedAt, finishedAt, retryAt;
+  final DateTime? updatedAt, startedAt, deadlineAt, finishedAt, retryAt;
   final SourceHealth? health;
   final SourceCatalogScan? catalogScan;
+
+  bool get scanningCatalog =>
+      source == 'hongguo' &&
+      running &&
+      const ['update', 'more', 'rescan'].contains(operation) &&
+      catalogScan?.state == 'scanning' &&
+      stage != '补齐剧集资料';
 
   String get catalogSummary {
     if (source != 'hongguo') {
@@ -120,7 +130,7 @@ class SourceStatus {
     final state = catalogScan?.state ?? (hasMore ? 'ready' : 'complete');
     final message = switch (state) {
       'complete' => '本轮扫描结束，可重新扫描',
-      'scanning' => '本轮扫描中，进度会自动保存',
+      'scanning' => '本轮扫描中，进度逐页保存',
       'interrupted' => '扫描中断，进度已保存，可继续',
       'not_started' => '可更新或重新扫描目录',
       _ => '本轮尚未结束，可继续扫描',

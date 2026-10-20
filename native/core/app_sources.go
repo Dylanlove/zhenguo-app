@@ -12,7 +12,8 @@ import (
 )
 
 type nativeSourceTask struct {
-	cancel context.CancelFunc
+	cancel   context.CancelFunc
+	deadline time.Time
 }
 
 type nativeSourceRecord struct {
@@ -51,6 +52,7 @@ type nativeSourceStatus struct {
 	Error        string              `json:"error,omitempty"`
 	StorageError string              `json:"storageError,omitempty"`
 	StartedAt    time.Time           `json:"startedAt"`
+	DeadlineAt   time.Time           `json:"deadlineAt"`
 	FinishedAt   time.Time           `json:"finishedAt"`
 	RetryAt      time.Time           `json:"retryAt"`
 	Health       *nativeSourceHealth `json:"health,omitempty"`
@@ -152,11 +154,15 @@ func (engine *nativeEngine) sourceStatusLocked(source string) nativeSourceStatus
 	if source == sourceHongguo {
 		scan = engine.hongguoScanStatusLocked(record)
 	}
+	var deadline time.Time
+	if task := engine.sourceTasks[source]; record.Running && task != nil {
+		deadline = task.deadline
+	}
 	return nativeSourceStatus{Source: source, Count: len(engine.catalogs[source]), UnknownVIP: unknownVIP, Page: max(1, state.Page), HasMore: !found || state.HasMore,
 		UpdatedAt: state.UpdatedAt, Operation: record.Operation, Running: record.Running, Stage: stage,
 		Completed: record.Completed, Total: record.Total, Added: record.Added, Error: record.Error,
 		StorageError: warning, CatalogScan: scan,
-		StartedAt: record.StartedAt, FinishedAt: record.FinishedAt, RetryAt: record.RetryAt, Health: record.Health}
+		StartedAt: record.StartedAt, DeadlineAt: deadline, FinishedAt: record.FinishedAt, RetryAt: record.RetryAt, Health: record.Health}
 }
 
 func (engine *nativeEngine) changeSourceRecord(source string, change func(*nativeSourceRecord)) {
@@ -211,7 +217,8 @@ func (engine *nativeEngine) startSourceTask(source, operation string, drama nati
 		return nativeSourceStatus{}, fmt.Errorf("站源暂时暂停请求，请在 %d 秒后重试", max(1, int(time.Until(previous.RetryAt).Seconds()+.999)))
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 12*time.Minute)
-	task := &nativeSourceTask{cancel: cancel}
+	deadline, _ := ctx.Deadline()
+	task := &nativeSourceTask{cancel: cancel, deadline: deadline}
 	engine.sourceTasks[source] = task
 	previous.Operation, previous.Running, previous.Stage = operation, true, "准备中"
 	previous.Completed, previous.Total, previous.Added = 0, 0, 0

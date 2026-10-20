@@ -241,13 +241,25 @@ func (engine *nativeEngine) saveCatalogCache(source string, result *nativeCatalo
 	if base, _, categorized := strings.Cut(source, "|"); categorized {
 		engine.catalogs[base] = mergeNativeCatalog(engine.catalogs[base], items)
 	}
-	err := engine.writeCatalogDiskLocked()
+	var err error
+	if result.immediateSave {
+		err = engine.writeCatalogCheckpointLocked()
+	} else {
+		err = engine.writeCatalogDiskLocked()
+	}
 	result.saveError = err
 	if err != nil {
 		result.Warning = joinNativeWarnings(result.Warning, err.Error())
 		result.Fresh, result.HasMore = false, true
 	}
 	return err
+}
+
+func (engine *nativeEngine) writeCatalogCheckpointLocked() error {
+	deferred := engine.deferCatalogSave
+	engine.deferCatalogSave = false
+	defer func() { engine.deferCatalogSave = deferred }()
+	return engine.writeCatalogDiskLocked()
 }
 
 func (engine *nativeEngine) writeCatalogDiskLocked() error {

@@ -107,7 +107,7 @@ func (engine *nativeEngine) prepareHongguoCatalogScan(ctx context.Context, opera
 	defer engine.mu.Unlock()
 	engine.hongguoCatalog = cloneHongguoCatalogState(state)
 	engine.catalogStates[sourceHongguo] = nativeCatalogState{HasMore: true}
-	return engine.writeCatalogDiskLocked()
+	return engine.writeCatalogCheckpointLocked()
 }
 
 func (engine *nativeEngine) loadHongguoSourceCatalog(ctx context.Context, operation string) error {
@@ -115,6 +115,9 @@ func (engine *nativeEngine) loadHongguoSourceCatalog(ctx context.Context, operat
 		return err
 	}
 	ctx = context.WithValue(ctx, libraryScanKey{}, true)
+	engine.mu.Lock()
+	initialCount := len(engine.catalogs[sourceHongguo])
+	engine.mu.Unlock()
 	limit := engine.downloader.cfg.MaxPagesPerSort
 	if limit < 1 {
 		limit = defaultConfig().MaxPagesPerSort
@@ -141,7 +144,11 @@ func (engine *nativeEngine) loadHongguoSourceCatalog(ctx context.Context, operat
 		engine.changeSourceRecord(sourceHongguo, func(record *nativeSourceRecord) {
 			record.Stage = "扫描红果 App 目录"
 		})
-		result, err := engine.nativeCatalog(ctx, nativeInput{Source: sourceHongguo, Page: page, Force: true})
+		checkpoint := hongguoCatalogCheckpointFunc(func(items []Drama, snapshot *hongguoCatalogState, genre string) error {
+			return engine.saveHongguoCatalogPage(items, snapshot, genre, page, initialCount)
+		})
+		batchContext := context.WithValue(ctx, hongguoCatalogCheckpointKey{}, checkpoint)
+		result, err := engine.nativeCatalog(batchContext, nativeInput{Source: sourceHongguo, Page: page, Force: true})
 		if result.saveError != nil {
 			return result.saveError
 		}
@@ -156,4 +163,21 @@ func (engine *nativeEngine) loadHongguoSourceCatalog(ctx context.Context, operat
 		}
 	}
 	return nil
+}
+
+func (engine *nativeEngine) saveHongguoCatalogPage(items []Drama, snapshot *hongguoCatalogState, genre string, page, initialCount int) error {
+	result := nativeCatalogResult{Items: []nativeDrama{}, Page: page, HasMore: hongguoCatalogHasMore(snapshot), hongguo: snapshot, immediateSave: true}
+	for _, drama := range items {
+		result.Items = append(result.Items, nativeNormalize(drama))
+	}
+	if err := engine.saveCatalogCache(sourceHongguo, &result); err != nil {
+		return err
+	}
+	engine.mu.Lock()
+	defer engine.mu.Unlock()
+	record := engine.sourceRecords[sourceHongguo]
+	record.Stage = "扫描红果 App 目录 · " + genre
+	record.Added = max(0, len(engine.catalogs[sourceHongguo])-initialCount)
+	engine.sourceRecords[sourceHongguo] = record
+	return engine.saveSourceRecordsLocked()
 }

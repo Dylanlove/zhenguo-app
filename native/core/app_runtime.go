@@ -125,14 +125,15 @@ type nativeInput struct {
 }
 
 type nativeCatalogResult struct {
-	Items       []nativeDrama `json:"items"`
-	HasMore     bool          `json:"hasMore"`
-	Page        int           `json:"page"`
-	Warning     string        `json:"warning,omitempty"`
-	LocalSearch bool          `json:"localSearch"`
-	Fresh       bool          `json:"fresh"`
-	hongguo     *hongguoCatalogState
-	saveError   error
+	Items         []nativeDrama `json:"items"`
+	HasMore       bool          `json:"hasMore"`
+	Page          int           `json:"page"`
+	Warning       string        `json:"warning,omitempty"`
+	LocalSearch   bool          `json:"localSearch"`
+	Fresh         bool          `json:"fresh"`
+	hongguo       *hongguoCatalogState
+	saveError     error
+	immediateSave bool
 }
 
 type nativePlan struct {
@@ -382,7 +383,7 @@ func nativeDispatch(input nativeInput) (any, error) {
 			nativeState.engine = engine
 		}
 		nativeState.Unlock()
-		version := "0.2.176"
+		version := "0.2.177"
 		return map[string]any{"version": version, "standalone": true, "allSources": buildAllSources == "true", "capabilitySchema": 1, "sources": nativeCapabilities(version)}, nil
 	}
 	engine := nativeState.engine
@@ -593,7 +594,7 @@ func (engine *nativeEngine) nativeCatalog(ctx context.Context, input nativeInput
 		}
 	}
 	d := engine.downloader
-	result := nativeCatalogResult{Items: []nativeDrama{}, Page: page}
+	result := nativeCatalogResult{Items: []nativeDrama{}, Page: page, immediateSave: source == sourceHongguo && fullScan}
 	if query != "" && source == sourceHongguo {
 		entry, hasMore, err := d.searchHongguoDramasPaged(ctx, query, page)
 		if err != nil {

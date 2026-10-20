@@ -32,6 +32,10 @@ type libraryKnownKey struct{}
 
 type hongguoCatalogProbeKey struct{}
 
+type hongguoCatalogCheckpointKey struct{}
+
+type hongguoCatalogCheckpointFunc func([]Drama, *hongguoCatalogState, string) error
+
 func (downloader *Downloader) fetchHongguoAppCatalog(ctx context.Context) ([]Drama, error) {
 	return downloader.fetchHongguoAppCatalogCategory(ctx, "")
 }
@@ -216,6 +220,11 @@ func (downloader *Downloader) fetchHongguoAppCatalogCategory(ctx context.Context
 				client.mu.Lock()
 				client.state.Feeds[feedKey(genre.key)] = checkpoint
 				client.mu.Unlock()
+				if save, ok := ctx.Value(hongguoCatalogCheckpointKey{}).(hongguoCatalogCheckpointFunc); ok {
+					if err := save(items, downloader.hongguoCatalogSnapshot(), genre.name); err != nil {
+						return interrupt(err)
+					}
+				}
 			}
 			reportLibraryProgress(ctx, sourceHongguo, items, nil, false)
 		}

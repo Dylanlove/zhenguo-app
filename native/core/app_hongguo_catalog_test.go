@@ -2,15 +2,109 @@ package core
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"os"
 	"path/filepath"
 	"reflect"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 )
+
+func TestHongguoSourcePublishesAndPersistsPagesBeforeTaskStops(t *testing.T) {
+	blocked := make(chan struct{})
+	engine := sourceFixtureEngine(t, func(request *http.Request) (*http.Response, error) {
+		payload := nativeHongguoRequestForTest(t, request)
+		if payload.Scene == "ai_series" {
+			close(blocked)
+			<-request.Context().Done()
+			return nil, request.Context().Err()
+		}
+		ids := []string{"1001"}
+		if payload.Scene == "default" {
+			ids = append(ids, "1000")
+		}
+		return nativeHongguoResponse(request, 18, true, "fixture", ids...), nil
+	})
+	engine.catalogs[sourceHongguo] = []nativeDrama{{ID: "hongguo:1000", Source: sourceHongguo, Title: "保留剧目", Description: "保留资料"}}
+	engine.deferCatalogSave = true
+	status, err := engine.startSourceTask(sourceHongguo, "more", nativeDrama{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		engine.cancelSourceTask(sourceHongguo)
+		awaitSourceTask(t, engine, sourceHongguo)
+	})
+	if status.DeadlineAt.Sub(status.StartedAt) < 11*time.Minute || status.DeadlineAt.Sub(status.StartedAt) > 12*time.Minute {
+		t.Fatal("task did not expose its actual time limit", status)
+	}
+	select {
+	case <-blocked:
+	case <-time.After(3 * time.Second):
+		t.Fatal("scan did not reach the blocked request")
+	}
+	status = engine.sourceStatus(sourceHongguo)
+	if !status.Running || status.Count != 2 || status.Added != 1 || status.CatalogScan.Feeds[0].Pages != 1 || status.CatalogScan.Feeds[1].Pages != 1 || !strings.Contains(status.Stage, "漫剧") {
+		t.Fatal("completed pages were invisible while the task was still running", status)
+	}
+	body, err := os.ReadFile(filepath.Join(engine.directory, "catalogs.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var disk nativeCatalogDisk
+	if err := json.Unmarshal(body, &disk); err != nil {
+		t.Fatal(err)
+	}
+	if len(disk.Catalogs[sourceHongguo]) != 2 || disk.HongguoApp.Feeds["short_play"].Offset != 18 || disk.HongguoApp.Feeds["comic_series"].Offset != 18 || disk.HongguoApp.Feeds["ai_series"].Initialized {
+		t.Fatal("page items and cursors were not saved together before the next request", disk.HongguoApp)
+	}
+	engine.mu.Lock()
+	deferred := engine.deferCatalogSave
+	engine.mu.Unlock()
+	if !deferred {
+		t.Fatal("page checkpoint changed another source's deferred-save setting")
+	}
+	engine.cancelSourceTask(sourceHongguo)
+	status = awaitSourceTask(t, engine, sourceHongguo)
+	if status.Count != 2 || status.Added != 1 || !status.DeadlineAt.IsZero() {
+		t.Fatal("stopping changed the published count or retained a finished deadline", status)
+	}
+	var offsets []int
+	restored := reopenCatalogEngine(t, engine.directory, func(request *http.Request) (*http.Response, error) {
+		payload := nativeHongguoRequestForTest(t, request)
+		offsets = append(offsets, payload.Offset)
+		return nativeHongguoResponse(request, payload.Offset+18, false, "fixture", strconv.Itoa(2000+len(offsets))), nil
+	})
+	if err := restored.loadHongguoSourceCatalog(context.Background(), "more"); err != nil || !reflect.DeepEqual(offsets, []int{18, 18, 0}) || restored.sourceStatus(sourceHongguo).Count != 5 {
+		t.Fatal("restart did not resume the last durable page", err, offsets)
+	}
+}
+
+func TestHongguoPageSaveFailureStopsBeforeAnotherRequest(t *testing.T) {
+	calls := 0
+	var path string
+	engine := sourceFixtureEngine(t, func(request *http.Request) (*http.Response, error) {
+		nativeHongguoRequestForTest(t, request)
+		calls++
+		if err := os.Remove(path); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Mkdir(path, 0700); err != nil {
+			t.Fatal(err)
+		}
+		return nativeHongguoResponse(request, 18, true, "fixture", "1000"), nil
+	})
+	path = filepath.Join(engine.directory, "catalogs.json")
+	err := engine.loadHongguoSourceCatalog(context.Background(), "update")
+	var persistence *nativePersistenceError
+	if !errors.As(err, &persistence) || calls != 1 || engine.sourceStatus(sourceHongguo).Count != 1 || engine.sourceStatus(sourceHongguo).StorageError == "" {
+		t.Fatal("failed page save allowed further requests or hid unsaved content", err, calls)
+	}
+}
 
 func TestHongguoSourceUpdateRescansEndedCatalogPastKnownPages(t *testing.T) {
 	calls := map[string][]int{}
