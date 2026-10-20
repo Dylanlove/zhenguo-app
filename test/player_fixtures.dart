@@ -85,9 +85,19 @@ class ScriptedPlayer extends PlatformPlayer {
     playingController.add(false);
   }
 
-  void videoSize(int width, int height) {
+  void videoSize(
+    int width,
+    int height, {
+    int? displayWidth,
+    int? displayHeight,
+  }) {
     videoParamsController.add(
-      VideoParams(w: width, h: height, dw: width, dh: height),
+      VideoParams(
+        w: width,
+        h: height,
+        dw: displayWidth ?? width,
+        dh: displayHeight ?? height,
+      ),
     );
   }
 

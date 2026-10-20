@@ -125,9 +125,7 @@ void main() {
         find.descendant(of: qualityButton, matching: find.text('1080P')),
         findsNothing,
       );
-      player.videoParamsController.add(
-        const VideoParams(w: 406, h: 720, dw: 1080, dh: 1920),
-      );
+      player.videoSize(406, 720, displayWidth: 1080, displayHeight: 1920);
       await settleOperations(tester);
       expect(
         find.descendant(of: qualityButton, matching: find.text('406×720')),
