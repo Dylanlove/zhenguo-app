@@ -179,7 +179,14 @@ void main() {
     (tester) async {
       SharedPreferences.setMockInitialValues({
         'profiles': jsonEncode([
-          const LocalProfile(id: 'default', name: '管理员', admin: true).toJson(),
+          const LocalProfile(
+            id: 'default',
+            name: '管理员',
+            admin: true,
+            salt: '11111111111111111111111111111111',
+            pinHash:
+                'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+          ).toJson(),
           const LocalProfile(
             id: 'viewer',
             name: '只看红果',
@@ -190,6 +197,9 @@ void main() {
         'activeProfile': 'viewer',
       });
       final store = LocalStore(await SharedPreferences.getInstance());
+      expect(store.configurationError, isNull);
+      expect(store.locked, isFalse);
+      expect(store.profile.id, 'viewer');
       final repository = SourceFixtureRepository();
       await tester.pumpWidget(
         MaterialApp(
