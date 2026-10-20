@@ -6,6 +6,46 @@ import 'live_programme_guide.dart';
 import 'playback_preferences.dart';
 import 'ysp_live.dart';
 
+Future<String?> showYspPlaybackMenu(
+  BuildContext context,
+  LivePlaybackController playback, {
+  String catchupLabel = '7 天回看',
+}) => showModalBottomSheet<String>(
+  context: context,
+  showDragHandle: true,
+  builder: (context) => SafeArea(
+    child: SingleChildScrollView(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          ListTile(
+            leading: const Icon(Icons.high_quality),
+            title: const Text('画质选择'),
+            onTap: () => Navigator.pop(context, 'quality'),
+          ),
+          if (playback.supportsCatchup)
+            ListTile(
+              leading: const Icon(Icons.replay),
+              title: Text(catchupLabel),
+              onTap: () => Navigator.pop(context, 'catchup'),
+            ),
+          if (playback.catchup)
+            ListTile(
+              leading: const Icon(Icons.live_tv),
+              title: const Text('回到直播'),
+              onTap: () => Navigator.pop(context, 'live'),
+            ),
+          ListTile(
+            leading: const Icon(Icons.cast),
+            title: const Text('订阅分享与诊断'),
+            onTap: () => Navigator.pop(context, 'settings'),
+          ),
+        ],
+      ),
+    ),
+  ),
+);
+
 Future<void> showYspQualitySheet(
   BuildContext context,
   LivePlaybackController playback,
@@ -13,9 +53,13 @@ Future<void> showYspQualitySheet(
   final selected = await showModalBottomSheet<String>(
     context: context,
     showDragHandle: true,
+    isScrollControlled: true,
+    useSafeArea: true,
     builder: (context) => SafeArea(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
+      top: false,
+      child: ListView(
+        shrinkWrap: true,
+        padding: EdgeInsets.zero,
         children: [
           const ListTile(title: Text('央视频画质')),
           for (final quality in const ['auto', 'best', 'hd'])

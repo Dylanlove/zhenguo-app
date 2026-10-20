@@ -631,39 +631,7 @@ class _LiveScreenState extends State<LiveScreen> {
   }
 
   Future<void> _yspMenu() async {
-    final selected = await showModalBottomSheet<String>(
-      context: context,
-      showDragHandle: true,
-      builder: (context) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              leading: const Icon(Icons.high_quality),
-              title: const Text('画质选择'),
-              onTap: () => Navigator.pop(context, 'quality'),
-            ),
-            if (_playback.supportsCatchup)
-              ListTile(
-                leading: const Icon(Icons.replay),
-                title: const Text('7 天回看'),
-                onTap: () => Navigator.pop(context, 'catchup'),
-              ),
-            if (_playback.catchup)
-              ListTile(
-                leading: const Icon(Icons.live_tv),
-                title: const Text('回到直播'),
-                onTap: () => Navigator.pop(context, 'live'),
-              ),
-            ListTile(
-              leading: const Icon(Icons.cast),
-              title: const Text('订阅分享与诊断'),
-              onTap: () => Navigator.pop(context, 'settings'),
-            ),
-          ],
-        ),
-      ),
-    );
+    final selected = await showYspPlaybackMenu(context, _playback);
     if (!mounted) return;
     try {
       switch (selected) {
