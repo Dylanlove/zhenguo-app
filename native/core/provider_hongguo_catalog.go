@@ -24,7 +24,7 @@ var hongguoAppGenres = []struct {
 
 type libraryMoreKey struct{}
 
-type libraryUpdateKey struct{}
+type libraryScanKey struct{}
 
 type libraryKnownKey struct{}
 
@@ -55,7 +55,7 @@ func (downloader *Downloader) fetchHongguoAppCatalogCategory(ctx context.Context
 	client.catalogMu.Lock()
 	defer client.catalogMu.Unlock()
 	more, _ := ctx.Value(libraryMoreKey{}).(bool)
-	update, _ := ctx.Value(libraryUpdateKey{}).(bool)
+	fullScan, _ := ctx.Value(libraryScanKey{}).(bool)
 	known, _ := ctx.Value(libraryKnownKey{}).(map[string]bool)
 	state := downloader.hongguoCatalogSnapshot()
 	pageLimit := downloader.cfg.MaxPagesPerSort
@@ -66,10 +66,6 @@ func (downloader *Downloader) fetchHongguoAppCatalogCategory(ctx context.Context
 		pageLimit = 200
 	}
 	headLimit := min(pageLimit, 3)
-	roundLimit := pageLimit
-	if update {
-		roundLimit += headLimit
-	}
 	type feedScan struct {
 		cursor hongguoCatalogCursor
 		tail   hongguoCatalogCursor
@@ -80,7 +76,7 @@ func (downloader *Downloader) fetchHongguoAppCatalogCategory(ctx context.Context
 	scans := make([]feedScan, len(genres))
 	for index, genre := range genres {
 		cursor := state.Feeds[feedKey(genre.key)]
-		if !more && cursor.Initialized {
+		if !more && cursor.Initialized && !fullScan {
 			scans[index].head = true
 			scans[index].tail = cursor
 		} else {
@@ -91,7 +87,28 @@ func (downloader *Downloader) fetchHongguoAppCatalogCategory(ctx context.Context
 	seen := map[string]int{}
 	var dramas []Drama
 	var failures []error
-	for round := 0; round < roundLimit; round++ {
+	stopFeed := func(key, reason string) {
+		client.mu.Lock()
+		cursor := client.state.Feeds[key]
+		if !cursor.Exhausted {
+			cursor.StopReason = reason
+			client.state.Feeds[key] = cursor
+		}
+		client.mu.Unlock()
+	}
+	interrupt := func(err error) ([]Drama, error) {
+		reason := "error"
+		if errors.Is(err, context.Canceled) {
+			reason = "canceled"
+		} else if errors.Is(err, context.DeadlineExceeded) {
+			reason = "timeout"
+		}
+		for _, genre := range genres {
+			stopFeed(feedKey(genre.key), reason)
+		}
+		return dramas, err
+	}
+	for round := 0; round < pageLimit; round++ {
 		active := false
 		for index, genre := range genres {
 			scan := &scans[index]
@@ -99,7 +116,7 @@ func (downloader *Downloader) fetchHongguoAppCatalogCategory(ctx context.Context
 				continue
 			}
 			if err := ctx.Err(); err != nil {
-				return dramas, err
+				return interrupt(err)
 			}
 			active = true
 			cursor := scan.cursor
@@ -154,10 +171,11 @@ func (downloader *Downloader) fetchHongguoAppCatalogCategory(ctx context.Context
 				payload["session_id"] = ""
 			}
 			if err := ctx.Err(); err != nil {
-				return dramas, err
+				return interrupt(err)
 			}
 			if pageErr != nil {
 				failures = append(failures, fmt.Errorf("%s: %w", genre.name, pageErr))
+				stopFeed(feedKey(genre.key), "error")
 				scan.done = true
 				continue
 			}
@@ -174,11 +192,6 @@ func (downloader *Downloader) fetchHongguoAppCatalogCategory(ctx context.Context
 			}
 			if scan.head && (scan.done || scan.pages >= headLimit) {
 				scan.done = true
-				if update && !checkpoint.Exhausted {
-
-					scan.cursor = checkpoint
-					scan.head, scan.done, scan.pages = false, false, 0
-				}
 			}
 			client.mu.Lock()
 			client.state.Feeds[feedKey(genre.key)] = checkpoint
@@ -187,6 +200,11 @@ func (downloader *Downloader) fetchHongguoAppCatalogCategory(ctx context.Context
 		}
 		if !active {
 			break
+		}
+	}
+	for index, genre := range genres {
+		if !scans[index].done && scans[index].pages >= pageLimit {
+			stopFeed(feedKey(genre.key), "batch")
 		}
 	}
 	sort.SliceStable(dramas, func(left, right int) bool { return dramas[left].DisplayTitle() < dramas[right].DisplayTitle() })
@@ -240,6 +258,11 @@ func parseHongguoCatalogPage(result map[string]any, cursor hongguoCatalogCursor,
 		return items, cursor, errors.New("App 分页会话无效，已保留上次位置")
 	}
 	cursor.Exhausted = !hasMore
+	cursor.Pages++
+	cursor.StopReason = ""
+	if cursor.Exhausted {
+		cursor.StopReason = "end"
+	}
 	cursor.Initialized = true
 	cursor.Offset = next
 	cursor.SessionID = session

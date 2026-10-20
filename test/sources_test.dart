@@ -63,6 +63,55 @@ class SourceFixtureRepository extends FixtureRepository {
 }
 
 void main() {
+  testWidgets(
+    'ended Hongguo catalog can explicitly rescan while more is disabled',
+    (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      final store = LocalStore(await SharedPreferences.getInstance());
+      final repository = SourceFixtureRepository();
+      repository.statuses['hongguo'] = SourceStatus.fromJson({
+        'source': 'hongguo',
+        'count': 2639,
+        'page': 3,
+        'hasMore': false,
+        'catalogScan': {'state': 'complete', 'feeds': []},
+      });
+      await tester.pumpWidget(
+        MaterialApp(
+          home: SourcesScreen(repository: repository, store: store),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('已收录 2639 部 · 本轮扫描结束，可重新扫描'), findsOneWidget);
+      final menu = find.byTooltip('红果更多操作');
+      await tester.ensureVisible(menu);
+      await tester.tap(menu);
+      await tester.pumpAndSettle();
+      final more = find.ancestor(
+        of: find.text('继续加载一批'),
+        matching: find.byType(PopupMenuItem<String>),
+      );
+      expect(tester.widget<PopupMenuItem<String>>(more).enabled, isFalse);
+      await tester.tap(find.byKey(const ValueKey('rescan-hongguo')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+      expect(repository.operations, ['hongguo:rescan']);
+      await tester.pumpWidget(const SizedBox.shrink());
+      store.dispose();
+    },
+  );
+
+  test('unsaved catalog progress does not claim it has been saved', () {
+    final status = SourceStatus.fromJson({
+      'source': 'hongguo',
+      'count': 3,
+      'storageError': '保存失败',
+      'catalogScan': {'state': 'interrupted', 'feeds': []},
+    });
+    expect(status.catalogSummary, contains('尚未保存'));
+    expect(status.catalogSummary, isNot(contains('进度已保存')));
+  });
+
   testWidgets('source list keeps bottom content above system navigation', (
     tester,
   ) async {

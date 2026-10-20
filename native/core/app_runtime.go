@@ -382,7 +382,7 @@ func nativeDispatch(input nativeInput) (any, error) {
 			nativeState.engine = engine
 		}
 		nativeState.Unlock()
-		version := "0.2.174"
+		version := "0.2.175"
 		return map[string]any{"version": version, "standalone": true, "allSources": buildAllSources == "true", "capabilitySchema": 1, "sources": nativeCapabilities(version)}, nil
 	}
 	engine := nativeState.engine
@@ -578,6 +578,7 @@ func (engine *nativeEngine) nativeCatalog(ctx context.Context, input nativeInput
 	}
 	page := max(1, input.Page)
 	query := strings.TrimSpace(input.Query)
+	fullScan, _ := ctx.Value(libraryScanKey{}).(bool)
 	if query == "" {
 		if retried, err := engine.retryCatalogSave(); retried {
 			cached := engine.nativeCached(cacheKey)
@@ -723,7 +724,7 @@ func (engine *nativeEngine) nativeCatalog(ctx context.Context, input nativeInput
 		if category != "" && state != nil {
 			result.HasMore = !state.Feeds["category:"+category].Exhausted
 		}
-		if len(items) == 0 && err != nil && ctx.Err() == nil && (category == "" || category == "short_play") {
+		if !fullScan && len(items) == 0 && err != nil && ctx.Err() == nil && (category == "" || category == "short_play") {
 			var totalPages int
 			items, totalPages, err = d.fetchHongguoCategoryPage(ctx, "real-drama?page="+strconv.Itoa(page), "真人剧")
 			result.HasMore = page < totalPages
@@ -772,9 +773,15 @@ func (engine *nativeEngine) nativeCatalog(ctx context.Context, input nativeInput
 		}
 	}
 	if err != nil && len(items) == 0 {
+		if source == sourceHongguo && fullScan && result.hongguo != nil {
+			result.Warning = publicError(err).Error()
+			engine.saveCatalogCache(cacheKey, &result)
+			return result, errors.Join(err, result.saveError)
+		}
 		return result, err
 	}
-	if len(items) == 0 && page == 1 && source != sourceHuangju && source != sourceYeguo && source != sourceDSD && !isDuanjuProviderSource(source) && !isFilmProviderSource(source) {
+	emptyHongguoScan := source == sourceHongguo && fullScan && result.hongguo != nil && !result.HasMore
+	if len(items) == 0 && page == 1 && !emptyHongguoScan && source != sourceHuangju && source != sourceYeguo && source != sourceDSD && !isDuanjuProviderSource(source) && !isFilmProviderSource(source) {
 		return result, errors.New("站源暂未返回剧集，请稍后刷新")
 	}
 	if err != nil {

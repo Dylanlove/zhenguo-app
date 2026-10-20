@@ -21,6 +21,8 @@ const hongguoAppUserAgent = "com.phoenix.read/73532 (Linux; U; Android 16; zh_CN
 
 type hongguoCatalogCursor struct {
 	Offset        int       `json:"offset"`
+	Pages         int       `json:"pages,omitempty"`
+	StopReason    string    `json:"stopReason,omitempty"`
 	SessionID     string    `json:"sessionId,omitempty"`
 	LastID        string    `json:"lastId,omitempty"`
 	PageSignature string    `json:"pageSignature,omitempty"`
@@ -30,10 +32,11 @@ type hongguoCatalogCursor struct {
 }
 
 type hongguoCatalogState struct {
-	Version   int                             `json:"version"`
-	DeviceID  string                          `json:"deviceId"`
-	InstallID string                          `json:"installId"`
-	Feeds     map[string]hongguoCatalogCursor `json:"feeds"`
+	Version       int                             `json:"version"`
+	DeviceID      string                          `json:"deviceId"`
+	InstallID     string                          `json:"installId"`
+	Feeds         map[string]hongguoCatalogCursor `json:"feeds"`
+	ScanStartedAt time.Time                       `json:"scanStartedAt,omitempty"`
 }
 
 type hongguoAppClient struct {
@@ -86,8 +89,15 @@ func (downloader *Downloader) restoreHongguoCatalog(state *hongguoCatalogState) 
 		for _, genre := range hongguoAppGenres {
 			known = known || name == genre.key || name == "category:"+genre.key
 		}
-		if !known || !cursor.Initialized || cursor.Offset < 0 || cursor.Offset > 1_000_000 || len(cursor.SessionID) > 4096 || len(cursor.LastID) > 256 || len(cursor.PageSignature) > 64 {
+		if !known || !cursor.Initialized && (cursor.Offset != 0 || cursor.Exhausted) || cursor.Offset < 0 || cursor.Offset > 1_000_000 || cursor.Pages < 0 || cursor.Pages > 1_000_000 || len(cursor.SessionID) > 4096 || len(cursor.LastID) > 256 || len(cursor.PageSignature) > 64 {
 			delete(cloned.Feeds, name)
+			continue
+		}
+		switch cursor.StopReason {
+		case "", "end", "batch", "error", "canceled", "timeout":
+		default:
+			cursor.StopReason = ""
+			cloned.Feeds[name] = cursor
 		}
 	}
 	client := downloader.hongguoClient()

@@ -255,8 +255,25 @@ class DiagnosticReport {
     result.writeln('站源 $sourceName ($source) · 适配指纹 $fingerprint');
     result.writeln('生成时间 ${createdAt.toIso8601String()}');
     final health = status?.health;
-    if (status != null)
-      result.writeln('缓存 ${status!.count} 部 · 已加载第 ${status!.page} 页');
+    if (status != null) {
+      if (source == 'hongguo') {
+        result.writeln(status!.catalogSummary);
+        final scan = status!.catalogScan;
+        if (scan?.startedAt != null) {
+          result.writeln('本轮开始 ${scan!.startedAt!.toUtc().toIso8601String()}');
+        }
+        for (final feed in scan?.feeds ?? <SourceCatalogFeed>[]) {
+          result.writeln(
+            '${diagnosticText(feed.name, limit: 16)} · offset ${feed.offset} · 成功读取 ${feed.pages} 页 · ${diagnosticText(feed.reason, limit: 120)}',
+          );
+          if (feed.updatedAt != null) {
+            result.writeln('最后读取 ${feed.updatedAt!.toUtc().toIso8601String()}');
+          }
+        }
+      } else {
+        result.writeln('缓存 ${status!.count} 部 · 已加载第 ${status!.page} 页');
+      }
+    }
     result.writeln('站源检测：${health?.label ?? '尚未检测'}');
     if (health?.checkedAt != null)
       result.writeln('检测时间 ${health!.checkedAt!.toUtc().toIso8601String()}');
@@ -325,6 +342,20 @@ class DiagnosticReport {
         'adapter': fingerprint,
         'at': createdAt.toIso8601String(),
         'health': status?.health?.state ?? 'not_run',
+        if (source == 'hongguo' && status?.catalogScan != null)
+          'catalog': {
+            'count': status!.count,
+            'state': diagnosticText(status!.catalogScan!.state, limit: 16),
+            'feeds': [
+              for (final feed in status!.catalogScan!.feeds)
+                {
+                  'name': diagnosticText(feed.name, limit: 16),
+                  'offset': feed.offset,
+                  'pages': feed.pages,
+                  'end': feed.exhausted,
+                },
+            ],
+          },
         'recent': recent,
       });
       if (utf8.encode(data).length <= 1800 || recent.isEmpty) return data;

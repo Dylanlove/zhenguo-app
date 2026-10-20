@@ -74,7 +74,7 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
   Widget _qrPanel() => LayoutBuilder(
     builder: (context, constraints) {
       const explanation = Text(
-        '仅包含版本、站源、检测状态和最多最近 8 条简要记录，不含媒体地址或鉴权信息。扫码后由你手动反馈。',
+        '仅包含版本、站源、检测与目录扫描状态和最多最近 8 条简要记录，不含媒体地址或鉴权信息。扫码后由你手动反馈。',
         textAlign: TextAlign.center,
       );
       if (constraints.maxWidth >= 640) {

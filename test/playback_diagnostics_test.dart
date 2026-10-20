@@ -8,6 +8,50 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  test('目录报告提供分类位置与结束状态，二维码不携带会话标识', () {
+    final status = SourceStatus.fromJson({
+      'source': 'hongguo',
+      'count': 3003,
+      'hasMore': true,
+      'catalogScan': {
+        'state': 'interrupted',
+        'startedAt': '2026-10-20T00:00:00Z',
+        'feeds': [
+          for (final name in ['真人剧', '漫剧', 'AI剧'])
+            {
+              'name': name,
+              'offset': 576,
+              'pages': 32,
+              'initialized': true,
+              'exhausted': false,
+              'reason': '任务达到时限，进度已保留',
+              'sessionId': 'private-session-secret',
+            },
+        ],
+      },
+    });
+    final report = DiagnosticReport(
+      version: 'test',
+      source: 'hongguo',
+      sourceName: '合成源',
+      fingerprint: '0123456789abcdef',
+      events: const [],
+      status: status,
+    );
+    expect(report.text, contains('扫描中断，进度已保存，可继续'));
+    expect(report.text, contains('offset 576'));
+    expect(report.text, contains('任务达到时限'));
+    final catalog = jsonDecode(report.qrText)['catalog'] as Map;
+    expect(catalog['state'], 'interrupted');
+    expect(catalog['count'], 3003);
+    expect(catalog['feeds'], hasLength(3));
+    expect(utf8.encode(report.qrText).length, lessThanOrEqualTo(1800));
+    expect(
+      report.text + report.qrText,
+      isNot(contains('private-session-secret')),
+    );
+  });
+
   testWidgets('清晰度面板可直接打开播放诊断报告', (tester) async {
     var opened = false;
     await tester.pumpWidget(

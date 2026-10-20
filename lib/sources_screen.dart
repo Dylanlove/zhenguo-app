@@ -261,7 +261,7 @@ class _SourcesScreenState extends State<SourcesScreen> {
                   const Padding(
                     padding: EdgeInsets.only(bottom: 16),
                     child: Text(
-                      '各站源可分别更新和检测。更新会查找新剧、继续加载一页历史内容，并分批补齐资料；离开此页后任务继续。',
+                      '各站源可分别更新和检测。红果更新会续扫未完成的目录，上一轮结束后重新扫描；已收录剧目保留。其他站源沿用分页更新，离开此页后任务继续。',
                     ),
                   ),
                   if (sources.isEmpty)
@@ -319,10 +319,8 @@ class _SourcesScreenState extends State<SourcesScreen> {
                 source.capabilities!.labels.join(' · '),
                 style: Theme.of(context).textTheme.bodySmall,
               ),
-            if (status != null && status.count > 0)
-              Text(
-                '已加载至第 ${status.page} 页${status.hasMore ? ' · 可继续加载' : ' · 当前分页已加载完'}',
-              ),
+            if (status != null && (source.id == 'hongguo' || status.count > 0))
+              Text(status.catalogSummary),
             const SizedBox(height: 12),
             Wrap(
               spacing: 10,
@@ -360,8 +358,14 @@ class _SourcesScreenState extends State<SourcesScreen> {
                     PopupMenuItem(
                       value: 'more',
                       enabled: status?.hasMore ?? true,
-                      child: const Text('继续加载一页'),
+                      child: Text(source.id == 'hongguo' ? '继续加载一批' : '继续加载一页'),
                     ),
+                    if (source.id == 'hongguo')
+                      const PopupMenuItem(
+                        key: ValueKey('rescan-hongguo'),
+                        value: 'rescan',
+                        child: Text('重新扫描目录'),
+                      ),
                     const PopupMenuItem(value: 'metadata', child: Text('补齐资料')),
                     if (source.id == 'huangdou')
                       PopupMenuItem(
