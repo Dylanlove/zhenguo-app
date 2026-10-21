@@ -17,7 +17,7 @@ String diagnosticText(Object? value, {int limit = 240}) {
       )
       .replaceAll(
         RegExp(
-          r'''(?:https?|socks5h?|file)://[^\s<>"']+''',
+          r'''(?:https?|tcp|tls|socks5h?|file)://[^\s<>"']+''',
           caseSensitive: false,
         ),
         '<url>',
@@ -35,7 +35,7 @@ String diagnosticText(Object? value, {int limit = 240}) {
       )
       .replaceAll(RegExp(r'\b[0-9a-fA-F]{32,}\b'), '<redacted>')
       .replaceAll(RegExp(r'\b\d{15,}\b'), '<id>')
-      .replaceAll(RegExp(r'''[A-Za-z]:[\\/][^\r\n"']+'''), '<path>')
+      .replaceAll(RegExp(r'''\b[A-Za-z]:[\\/](?!/)[^\r\n"']+'''), '<path>')
       .replaceAll(RegExp(r'[\r\n\t]+'), ' ')
       .trim();
   return String.fromCharCodes(safe.runes.take(limit));

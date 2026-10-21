@@ -100,6 +100,25 @@ void main() {
     }
   });
 
+  test('TCP 和 TLS 错误脱敏保留具体失败原因', () {
+    for (final protocol in ['tcp', 'tls']) {
+      final text = diagnosticText(
+        '$protocol: Connection to $protocol://127.0.0.1:49000?token=private-secret failed: Connection refused',
+      );
+      expect(text, '$protocol: Connection to <url> failed: Connection refused');
+      expect(text, isNot(contains('127.0.0.1')));
+      expect(text, isNot(contains('private-secret')));
+    }
+    expect(
+      diagnosticText(r'Failed to open C:\private\video.mp4'),
+      'Failed to open <path>',
+    );
+    expect(
+      diagnosticText('Failed to open C:/private/video.mp4'),
+      'Failed to open <path>',
+    );
+  });
+
   test('切换用户清理旧记录并拒绝旧播放会话的迟到事件', () {
     final log = PlaybackDiagnostics();
     addTearDown(log.dispose);

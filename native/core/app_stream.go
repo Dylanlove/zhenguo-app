@@ -503,19 +503,18 @@ func (stream *nativeStreamServer) nativeServe(writer http.ResponseWriter, reques
 			writer.WriteHeader(http.StatusOK)
 			return
 		}
+		for _, name := range []string{"Content-Type", "Content-Length", "Content-Range", "Accept-Ranges", "ETag", "Last-Modified"} {
+			if value := response.Header.Get(name); value != "" {
+				writer.Header().Set(name, value)
+			}
+		}
 		if buffered != nil && bufferedComplete {
-			writer.Header().Set("Content-Type", response.Header.Get("Content-Type"))
 			writer.Header().Set("Content-Length", fmt.Sprintf("%d", len(buffered)))
 			writer.WriteHeader(response.StatusCode)
 			_, _ = writer.Write(buffered)
 			return
 		}
 		defer response.Body.Close()
-		for _, name := range []string{"Content-Type", "Content-Length", "Content-Range", "Accept-Ranges", "ETag", "Last-Modified"} {
-			if value := response.Header.Get(name); value != "" {
-				writer.Header().Set(name, value)
-			}
-		}
 		writer.WriteHeader(response.StatusCode)
 		if request.Method == http.MethodGet {
 			if len(buffered) > 0 {
