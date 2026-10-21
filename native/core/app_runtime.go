@@ -392,7 +392,7 @@ func nativeDispatch(input nativeInput) (any, error) {
 			nativeState.engine = engine
 		}
 		nativeState.Unlock()
-		version := "0.2.182"
+		version := "0.2.183"
 		return map[string]any{"version": version, "standalone": true, "allSources": buildAllSources == "true", "capabilitySchema": 1, "sources": nativeCapabilities(version)}, nil
 	}
 	engine := nativeState.engine
@@ -908,6 +908,9 @@ func (engine *nativeEngine) nativeResolve(ctx context.Context, input nativeInput
 	media, err := engine.downloader.resolveProviderMedia(ctx, task)
 	if err != nil {
 		return nativePlan{}, err
+	}
+	if sourceFromDramaID(input.Drama.ID) == sourceXiaopingguo {
+		media = engine.downloader.prepareXiaopingguoPlayback(ctx, media)
 	}
 	choice := nativePlaybackChoices(media, input.Quality)
 	if source := sourceFromDramaID(input.Drama.ID); isFilmProviderSource(source) {

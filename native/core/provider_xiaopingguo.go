@@ -344,6 +344,7 @@ func (d *Downloader) resolveXiaopingguoMedia(ctx context.Context, task Task) (pr
 					return
 				}
 				results[index].media, results[index].err = d.resolveXiaopingguoRoute(ctx, route)
+				results[index].media.RouteName = fmt.Sprintf("线路 %d", index+1)
 			}(index, route)
 		}
 		group.Wait()

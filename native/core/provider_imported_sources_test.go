@@ -204,7 +204,7 @@ func TestXiaopingguoBinaryCatalogAndEpisodeRoutes(t *testing.T) {
 		t.Fatal(chapters, err)
 	}
 	media, err := d.resolveXiaopingguoMedia(context.Background(), Task{DramaID: "xiaopingguo:123", Chapter: chapters[0]})
-	if err != nil || len(media.Variants) != 1 || media.RouteName != "Ksvideo·原画" || media.Variants[0].RouteName != "备用" || !strings.Contains(media.URL, "signature=a%2Fb&order=1") {
+	if err != nil || len(media.Variants) != 1 || media.RouteName != "线路 1" || media.Variants[0].RouteName != "线路 2" || !strings.Contains(media.URL, "signature=a%2Fb&order=1") {
 		t.Fatal("episode lines were lost, mixed, or corrupted", media, err)
 	}
 	if media.credentials == nil || !media.credentials.omitReferer || media.credentials.userAgent != xiaopingguoUserAgent {
