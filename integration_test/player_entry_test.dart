@@ -217,4 +217,3 @@ void main() {
     await tester.pump(const Duration(seconds: 12));
   }, timeout: const Timeout(Duration(minutes: 3)));
 }
-Formatted 1 file (1 changed) in 0.01 seconds.
