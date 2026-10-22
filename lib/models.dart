@@ -23,11 +23,11 @@ class SourceSite {
       if (entry is! Map || entry['id'] is! String)
         throw const FormatException('站源能力描述无效');
       final id = entry['id'] as String;
-      if (!isAvailable(id) || items.containsKey(id))
+      if (!isKnown(id) || items.containsKey(id))
         throw const FormatException('站源能力描述与当前版本不一致');
       items[id] = SourceCapabilities.fromJson(Map<String, dynamic>.from(entry));
     }
-    if (values.any((source) => !items.containsKey(source.id)))
+    if (allValues.any((source) => !items.containsKey(source.id)))
       throw const FormatException('原生核心的站源能力描述不完整');
     _nativeCapabilities = Map.unmodifiable(items);
   }
