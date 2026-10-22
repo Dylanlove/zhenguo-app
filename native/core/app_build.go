@@ -2,7 +2,7 @@ package core
 
 import "errors"
 
-var buildAllSources = "false"
+var buildAllSources = "true"
 
 var errNativeBuildSource = errors.New("当前版本不包含此站源")
 

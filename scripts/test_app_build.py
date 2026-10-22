@@ -87,7 +87,8 @@ class AppBuildTests(unittest.TestCase):
                     self.assertEqual('--all-sources' in native, enabled)
                     self.assertEqual('--all-sources' in package, enabled)
                     self.assertIn('--dart-define=ALL_SOURCES=' + str(enabled).lower(), flutter)
-                    self.assertIn('core.buildAllSources=' + str(enabled).lower(), BuildVariant(enabled).linker_flags)
+                    flags = BuildVariant(enabled).linker_flags
+                    self.assertEqual('core.buildAllSources=true' in flags, enabled)
 
 
 if __name__ == '__main__':

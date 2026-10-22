@@ -71,6 +71,7 @@ class LocalStore extends ChangeNotifier {
       }
       _configurationError = null;
       _locked = forceLogin && profile.protected;
+      SourceSite.setUnlocked(allSourcesUnlocked);
       _loadLibrary();
     } catch (_) {
       _block('本地用户配置损坏，已锁定访问。原始记录已保留，请重新读取或从备份恢复。');
@@ -289,9 +290,12 @@ class LocalStore extends ChangeNotifier {
 
   bool get storagePromptShown => _bool('storagePromptShown') ?? false;
 
+  bool get allSourcesUnlocked =>
+      allSourcesEnabled || (_bool('allSourcesUnlocked') ?? false);
+
   bool get liveActivated =>
       allSourcesEnabled || (_bool('liveActivated') ?? false);
-  bool get canShowLive => allSourcesEnabled || liveActivated;
+  bool get canShowLive => allSourcesUnlocked || liveActivated;
 
   bool get autoExport =>
       !android6Compatibility && !locked && (_bool('autoExport') ?? false);
@@ -473,6 +477,12 @@ class LocalStore extends ChangeNotifier {
   Future<void> setLiveActivated(bool value) {
     if (allSourcesEnabled) return Future<void>.value();
     return _setting('liveActivated', value);
+  }
+
+  Future<void> setAllSourcesUnlocked(bool value) {
+    if (allSourcesEnabled) return Future<void>.value();
+    SourceSite.setUnlocked(value);
+    return _setting('allSourcesUnlocked', value);
   }
 
   Future<void> setGreenMode(bool value) => _setting('greenMode', value);

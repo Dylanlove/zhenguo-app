@@ -1865,17 +1865,27 @@ class _AboutDialogState extends State<_AboutDialog> {
     if (mounted) navigator.pop();
   }
 
-  Future<void> _activateLive() async {
-    if (_liveCode.text.trim() != liveActivationCode) {
-      setState(() => _liveCodeError = '激活码不正确');
+  Future<void> _activateCode() async {
+    final code = _liveCode.text.trim();
+    if (code == allSourcesActivationCode) {
+      try {
+        await widget.store.setAllSourcesUnlocked(true);
+        if (mounted) setState(() => _liveCodeError = null);
+      } catch (error) {
+        if (mounted) setState(() => _liveCodeError = '$error');
+      }
       return;
     }
-    try {
-      await widget.store.setLiveActivated(true);
-      if (mounted) setState(() => _liveCodeError = null);
-    } catch (error) {
-      if (mounted) setState(() => _liveCodeError = '$error');
+    if (code == liveActivationCode) {
+      try {
+        await widget.store.setLiveActivated(true);
+        if (mounted) setState(() => _liveCodeError = null);
+      } catch (error) {
+        if (mounted) setState(() => _liveCodeError = '$error');
+      }
+      return;
     }
+    setState(() => _liveCodeError = '激活码不正确');
   }
 
   @override
@@ -1933,26 +1943,26 @@ class _AboutDialogState extends State<_AboutDialog> {
               const Text('独立运行，打开即可浏览和播放。观看记录与追剧收藏保存在当前设备。'),
               if (!allSourcesEnabled) ...[
                 const SizedBox(height: 16),
-                if (widget.store.liveActivated)
-                  const Text('直播已激活')
+                if (widget.store.allSourcesUnlocked)
+                  const Text('全部站源已激活')
                 else ...[
                   TextField(
                     key: const ValueKey('about-live-code'),
                     controller: _liveCode,
                     textInputAction: TextInputAction.done,
                     decoration: InputDecoration(
-                      labelText: '直播激活码',
+                      labelText: '激活码',
                       errorText: _liveCodeError,
                     ),
-                    onSubmitted: (_) => _activateLive(),
+                    onSubmitted: (_) => _activateCode(),
                   ),
                   const SizedBox(height: 8),
                   Align(
                     alignment: AlignmentDirectional.centerEnd,
                     child: OutlinedButton(
                       key: const ValueKey('about-live-activate'),
-                      onPressed: _activateLive,
-                      child: const Text('激活直播'),
+                      onPressed: _activateCode,
+                      child: const Text('激活全部站源'),
                     ),
                   ),
                 ],

@@ -24,7 +24,10 @@ class BuildVariant:
 
     @property
     def linker_flags(self):
-        return '-s -w -X duanjuapp/native/core.buildAllSources=' + str(self.all_sources).lower()
+        flags = '-s -w'
+        if self.all_sources:
+            flags += ' -X duanjuapp/native/core.buildAllSources=true'
+        return flags
 
     @classmethod
     def from_dart_defines(cls, encoded):

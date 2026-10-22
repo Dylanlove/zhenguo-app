@@ -141,8 +141,14 @@ class SourceSite {
     ...allValues.where((site) => !site.adult),
     ...allValues.where((site) => site.adult),
   ]);
-  // 默认版本保持红果单站源；全站源版再开放已知站源集合。
-  static final values = allSourcesEnabled ? knownValues : [hongguo];
+  // 默认只暴露红果；构建参数或“关于”页激活后再开放已知站源集合。
+  static bool unlocked = allSourcesEnabled;
+  static void setUnlocked(bool value) {
+    unlocked = value;
+  }
+
+  static List<SourceSite> get values =>
+      unlocked ? knownValues : List<SourceSite>.unmodifiable([hongguo]);
   static bool isAvailable(String id) => values.any((site) => site.id == id);
   static bool isKnown(String id) => allValues.any((site) => site.id == id);
   static bool isAdult(String id) =>

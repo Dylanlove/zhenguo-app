@@ -32,6 +32,32 @@ void main() {
     store.dispose();
   });
 
+  test('activation code unlocks every source and live at runtime', () async {
+    SharedPreferences.setMockInitialValues({});
+    final store = LocalStore(await SharedPreferences.getInstance());
+    addTearDown(() {
+      SourceSite.setUnlocked(allSourcesEnabled);
+      store.dispose();
+    });
+    if (allSourcesEnabled) {
+      expect(store.allSourcesUnlocked, isTrue);
+      return;
+    }
+    expect(store.allSourcesUnlocked, isFalse);
+    expect(store.canShowLive, isFalse);
+    expect(store.allowsSource('dsd'), isFalse);
+    await store.setAllSourcesUnlocked(true);
+    expect(store.allSourcesUnlocked, isTrue);
+    expect(store.canShowLive, isTrue);
+    expect(SourceSite.unlocked, isTrue);
+    expect(store.allowsSource('dsd'), isTrue);
+    expect(SourceSite.isAvailable('xiaopingguo'), isTrue);
+    final reopened = LocalStore(await SharedPreferences.getInstance());
+    expect(reopened.allSourcesUnlocked, isTrue);
+    expect(reopened.allowsSource('dsd'), isTrue);
+    reopened.dispose();
+  });
+
   test(
     'edition filtering preserves favorites and history through backup restore',
     () async {
