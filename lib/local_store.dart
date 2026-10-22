@@ -290,8 +290,8 @@ class LocalStore extends ChangeNotifier {
 
   bool get storagePromptShown => _bool('storagePromptShown') ?? false;
 
-  bool get allSourcesUnlocked =>
-      allSourcesEnabled || (_bool('allSourcesUnlocked') ?? false);
+  bool _sessionAllSources = false;
+  bool get allSourcesUnlocked => allSourcesEnabled || _sessionAllSources;
 
   bool get liveActivated =>
       allSourcesEnabled || (_bool('liveActivated') ?? false);
@@ -477,8 +477,10 @@ class LocalStore extends ChangeNotifier {
 
   Future<void> setAllSourcesUnlocked(bool value) {
     if (allSourcesEnabled) return Future<void>.value();
+    _sessionAllSources = value;
     SourceSite.setUnlocked(value);
-    return _setting('allSourcesUnlocked', value);
+    _notify();
+    return Future<void>.value();
   }
 
   Future<void> setGreenMode(bool value) => _setting('greenMode', value);

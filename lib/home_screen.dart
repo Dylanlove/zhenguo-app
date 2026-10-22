@@ -49,7 +49,7 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> {
+class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   static const _recommendationCategory = 'app:recommendations';
   static const _tabDiscover = 0;
   static const _tabFollow = 2;
@@ -556,6 +556,7 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _scroll.addListener(_onCatalogScroll);
     _prefetch.onIdle = () => unawaited(_prefetchCatalog());
     _source = SourceSite.byId(widget.store.source);
@@ -577,7 +578,19 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   @override
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.hidden &&
+        state != AppLifecycleState.paused) {
+      return;
+    }
+    if (!allSourcesEnabled && widget.store.allSourcesUnlocked) {
+      widget.store.setAllSourcesUnlocked(false);
+    }
+  }
+
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _updater.removeListener(_updateChanged);
     _updater.dispose();
     _cacheRefreshTimer?.cancel();

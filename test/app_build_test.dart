@@ -32,7 +32,7 @@ void main() {
     store.dispose();
   });
 
-  test('activation code unlocks every source and live at runtime', () async {
+  test('activation code unlocks every source and live per session', () async {
     SharedPreferences.setMockInitialValues({});
     final store = LocalStore(await SharedPreferences.getInstance());
     addTearDown(() {
@@ -52,10 +52,11 @@ void main() {
     expect(SourceSite.unlocked, isTrue);
     expect(store.allowsSource('dsd'), isTrue);
     expect(SourceSite.isAvailable('xiaopingguo'), isTrue);
-    final reopened = LocalStore(await SharedPreferences.getInstance());
-    expect(reopened.allSourcesUnlocked, isTrue);
-    expect(reopened.allowsSource('dsd'), isTrue);
-    reopened.dispose();
+    await store.setAllSourcesUnlocked(false);
+    expect(store.allSourcesUnlocked, isFalse);
+    expect(store.canShowLive, isFalse);
+    expect(store.allowsSource('dsd'), isFalse);
+    expect(SourceSite.isAvailable('xiaopingguo'), isFalse);
   });
 
   test(
