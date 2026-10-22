@@ -1866,26 +1866,16 @@ class _AboutDialogState extends State<_AboutDialog> {
   }
 
   Future<void> _activateCode() async {
-    final code = _liveCode.text.trim();
-    if (code == allSourcesActivationCode) {
-      try {
-        await widget.store.setAllSourcesUnlocked(true);
-        if (mounted) setState(() => _liveCodeError = null);
-      } catch (error) {
-        if (mounted) setState(() => _liveCodeError = '$error');
-      }
+    if (_liveCode.text.trim() != allSourcesActivationCode) {
+      setState(() => _liveCodeError = '激活码不正确');
       return;
     }
-    if (code == liveActivationCode) {
-      try {
-        await widget.store.setLiveActivated(true);
-        if (mounted) setState(() => _liveCodeError = null);
-      } catch (error) {
-        if (mounted) setState(() => _liveCodeError = '$error');
-      }
-      return;
+    try {
+      await widget.store.setAllSourcesUnlocked(true);
+      if (mounted) setState(() => _liveCodeError = null);
+    } catch (error) {
+      if (mounted) setState(() => _liveCodeError = '$error');
     }
-    setState(() => _liveCodeError = '激活码不正确');
   }
 
   @override

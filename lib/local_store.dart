@@ -474,10 +474,6 @@ class LocalStore extends ChangeNotifier {
       _setting('exportPosters', value, admin: true);
   Future<void> setAutoExport(bool value) =>
       _setting('autoExport', value, admin: true);
-  Future<void> setLiveActivated(bool value) {
-    if (allSourcesEnabled) return Future<void>.value();
-    return _setting('liveActivated', value);
-  }
 
   Future<void> setAllSourcesUnlocked(bool value) {
     if (allSourcesEnabled) return Future<void>.value();
