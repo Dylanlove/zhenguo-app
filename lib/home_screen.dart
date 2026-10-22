@@ -589,6 +589,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     }
   }
 
+  @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _updater.removeListener(_updateChanged);

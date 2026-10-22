@@ -319,7 +319,7 @@ class PlaybackPreloader extends ChangeNotifier {
         slot != null && slot.ready != null && now.isBefore(slot.expires)
         ? slot.ready
         : null;
-    if (result != null) {
+    if (result != null && slot != null) {
       _event('下一集预加载复用', episode: episode, bytes: result.prefetchedBytes);
       _removeSlot(slot, notify: false);
     } else {
