@@ -176,12 +176,14 @@ class PlaybackPreloader extends ChangeNotifier {
         }
         continue;
       }
-      _slots[identity] = _PreloadSlot(identity, request)
-        ..delay = start
-            ? Timer(const Duration(milliseconds: 600), () {
-                _pump();
-              })
-            : null;
+      final fresh = _PreloadSlot(identity, request);
+      _slots[identity] = fresh;
+      if (start) {
+        fresh.delay = Timer(const Duration(milliseconds: 600), () {
+          fresh.delay = null;
+          _pump();
+        });
+      }
       changed = true;
     }
     if (changed) notifyListeners();
@@ -263,7 +265,10 @@ class PlaybackPreloader extends ChangeNotifier {
       if (identical(slot.pending, pending)) slot.pending = null;
       slot.loading = false;
       _loadingNow = false;
-      if (!_closed) notifyListeners();
+      if (!_closed) {
+        notifyListeners();
+        _pump();
+      }
     }
   }
 
@@ -323,7 +328,11 @@ class PlaybackPreloader extends ChangeNotifier {
       _event('下一集预加载复用', episode: episode, bytes: result.prefetchedBytes);
       _removeSlot(slot, notify: false);
     } else {
-      if (slot != null) _removeSlot(slot, notify: false);
+      if (slot != null) {
+        _removeSlot(slot, notify: false);
+      } else {
+        clear();
+      }
       if (active) _event('下一集预加载未命中', episode: episode);
     }
     return result;
