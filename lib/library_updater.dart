@@ -61,6 +61,7 @@ class LibraryUpdater extends ChangeNotifier {
         (status.finishedAt != null || submitted) &&
         {
           'update',
+          'rescan',
           'more',
           'metadata',
           'vipMetadata',

@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'app_build.dart';
+import 'source_capabilities.dart';
 
 class SourceSite {
   const SourceSite(this.id, this.name, this.description, {this.adult = false});
@@ -10,22 +11,51 @@ class SourceSite {
 
   /// 成人站源。绿色模式开启时不出现在站源管理与选择列表里。
   final bool adult;
-  bool get onlineSearch => id == 'hongguo' || pagedSearch;
+  static Map<String, SourceCapabilities> _nativeCapabilities = const {};
+  SourceCapabilities? get capabilities => _nativeCapabilities[id];
+  String get adapterFingerprint => capabilities?.fingerprint ?? '未加载';
+
+  static void installCapabilities(Object? raw, Object? schema) {
+    if (schema != 1 || raw is! List)
+      throw const FormatException('原生核心缺少站源能力描述，请更新完整安装包');
+    final items = <String, SourceCapabilities>{};
+    for (final entry in raw) {
+      if (entry is! Map || entry['id'] is! String)
+        throw const FormatException('站源能力描述无效');
+      final id = entry['id'] as String;
+      if (!isAvailable(id) || items.containsKey(id))
+        throw const FormatException('站源能力描述与当前版本不一致');
+      items[id] = SourceCapabilities.fromJson(Map<String, dynamic>.from(entry));
+    }
+    if (values.any((source) => !items.containsKey(source.id)))
+      throw const FormatException('原生核心的站源能力描述不完整');
+    _nativeCapabilities = Map.unmodifiable(items);
+  }
+
+  bool get onlineSearch =>
+      capabilities?.onlineSearch ??
+      (id == 'hongguo' || filmSource || pagedSearch);
+  bool get filmSource =>
+      capabilities?.film ??
+      (id == 'ikanbot' ||
+          id == 'a123' ||
+          id == 'xiaopingguo' ||
+          id == 'miguo-honey');
   bool get pagedSearch =>
-      id == 'hongguo' ||
-      id == 'huangguoai' ||
-      id == 'huangju' ||
-      id == 'yeguo' ||
-      id == 'dsd' ||
-      duanjuPaged;
+      capabilities?.searchPaging ??
+      (id == 'hongguo' ||
+          id == 'huangguoai' ||
+          id == 'huangju' ||
+          id == 'yeguo' ||
+          id == 'dsd' ||
+          id == 'xiaopingguo' ||
+          id == 'miguo-honey' ||
+          duanjuPaged);
   bool get duanjuPaged => const {
     'yaguo',
-    'guanguo',
     'huaguo',
-    'niuguo',
     'wuguo',
     'maoguo',
-    'fanguo',
     'heguo',
     'xingguo',
     'chaoguo',
@@ -39,7 +69,7 @@ class SourceSite {
     'chengguo',
     'xiaoguo',
   }.contains(id);
-  bool get searchSuggestions => id == 'hongguo';
+  bool get searchSuggestions => capabilities?.suggestions ?? (id == 'hongguo');
   String get groupId => switch (id) {
     'huangguo-video' || 'huangguoai' || 'cloudfront' => 'huangguo',
     _ => id,
@@ -53,16 +83,26 @@ class SourceSite {
   };
 
   static const hongguo = SourceSite('hongguo', '红果', '短剧 · 漫剧 · AI 剧');
+  static const ikanbot = SourceSite('ikanbot', '爱看机器人', '电影 · 剧集 · 多线路');
+  static const a123 = SourceSite('a123', 'A123TV', '电影 · 连续剧 · 综艺 · 动漫');
+  static const xiaopingguo = SourceSite(
+    'xiaopingguo',
+    '小苹果',
+    '电影 · 剧集 · 4K · 奈飞 · 多线路',
+  );
+  static const miguoHoney = SourceSite(
+    'miguo-honey',
+    '蜜果',
+    '视频 · 短剧 · 动漫 · 直播 · 多线路',
+    adult: true,
+  );
   static const dsd = SourceSite('dsd', '帝果', '懂色帝 · AV 网页目录', adult: true);
   static const duanjuValues = [
     SourceSite('yaguo', '芽果', '星芽短剧 · 登录接口'),
     SourceSite('maoguo', '猫果', '七猫短剧 · 签名接口'),
-    SourceSite('fanguo', '饭果', '西饭短剧 · 搜索接口'),
-    SourceSite('guanguo', '观果', '围观短剧 · 分类接口'),
     SourceSite('heguo', '河果', '河马剧场 · 网页接口'),
     SourceSite('xingguo', '星果', '星星短剧 · 连载接口'),
     SourceSite('huaguo', '花果', '花生短剧 · 网页目录'),
-    SourceSite('niuguo', '牛果', '牛牛短剧 · 分类接口'),
     SourceSite('wuguo', '伍果', '五五短剧 · 网页目录'),
     SourceSite('chaoguo', '超果', '超短剧 · AI 成人短剧', adult: true),
     SourceSite('miguo', '米果', '大米星球 · 网页目录'),
@@ -82,17 +122,6 @@ class SourceSite {
     SourceSite('ningguo', '柠果', '愛豆AV · 网页目录', adult: true),
     SourceSite('mangguo', '芒果', '真实人妻 · 网页目录', adult: true),
   ];
-  static const knownValues = [
-    hongguo,
-    SourceSite('huangdou', '豆果', '魔改短剧 · 网页目录', adult: true),
-    SourceSite('huangju', '剧果', '红果黄剧 · AI 成人短剧', adult: true),
-    SourceSite('yeguo', '野果', '野果短剧 · AI 成人短剧', adult: true),
-    dsd,
-    SourceSite('huangguo-video', '黄果视频', '黄果 · AI 成人短剧', adult: true),
-    SourceSite('huangguoai', '黄果 AI', '黄果 · AI 成人短剧', adult: true),
-    SourceSite('cloudfront', '黄果旧版', '黄果 · 旧 API 剧库', adult: true),
-    ...duanjuValues,
-  ];
   static const allValues = [
     hongguo,
     SourceSite('huangdou', '豆果', '魔改短剧 · 网页目录', adult: true),
@@ -103,7 +132,15 @@ class SourceSite {
     SourceSite('huangguoai', '黄果 AI', '黄果 · AI 成人短剧', adult: true),
     SourceSite('cloudfront', '黄果旧版', '黄果 · 旧 API 剧库', adult: true),
     ...duanjuValues,
+    ikanbot,
+    a123,
+    xiaopingguo,
+    miguoHoney,
   ];
+  static final knownValues = List<SourceSite>.unmodifiable([
+    ...allValues.where((site) => !site.adult),
+    ...allValues.where((site) => site.adult),
+  ]);
   // 默认版本保持红果单站源；全站源版再开放已知站源集合。
   static final values = allSourcesEnabled ? knownValues : [hongguo];
   static bool isAvailable(String id) => values.any((site) => site.id == id);
@@ -133,15 +170,95 @@ class SourceGroup {
 }
 
 class CatalogCategory {
-  const CatalogCategory(this.id, this.name, {this.local = false});
+  const CatalogCategory(
+    this.id,
+    this.name, {
+    this.local = false,
+    this.filters = const [],
+  });
   static const all = CatalogCategory('', '全部');
   final String id;
   final String name;
   final bool local;
+  final List<CatalogCategoryFilter> filters;
+  static String baseId(String selection) => selection.split('?').first;
+  static Map<String, String> query(String selection) {
+    final position = selection.indexOf('?');
+    if (position < 0) return {};
+    try {
+      return Uri.splitQueryString(selection.substring(position + 1));
+    } on FormatException {
+      return {};
+    }
+  }
+
+  Map<String, String> filterValues(String selection) {
+    final selected = query(selection);
+    final values = <String, String>{};
+    for (final filter in filters) {
+      if (!filter.active(values)) continue;
+      final candidate = selected[filter.key] ?? filter.defaultValue;
+      values[filter.key] = filter.values.any((value) => value.id == candidate)
+          ? candidate
+          : filter.defaultValue;
+    }
+    return values;
+  }
+
+  String selection(Map<String, String> values) {
+    final active = <String, String>{};
+    final query = <String, String>{};
+    for (final filter in filters) {
+      if (!filter.active(active)) continue;
+      final value = values[filter.key] ?? filter.defaultValue;
+      active[filter.key] = value;
+      if (value != filter.defaultValue) query[filter.key] = value;
+    }
+    return query.isEmpty ? id : '$id?${Uri(queryParameters: query).query}';
+  }
+
   factory CatalogCategory.fromJson(Map<String, dynamic> json) =>
       CatalogCategory(
         json['id'] as String? ?? '',
         json['name'] as String? ?? '全部',
+        filters: [
+          for (final filter in json['filters'] as List? ?? const [])
+            if (filter is Map)
+              CatalogCategoryFilter.fromJson(Map<String, dynamic>.from(filter)),
+        ],
+      );
+}
+
+class CatalogCategoryFilter {
+  const CatalogCategoryFilter({
+    required this.key,
+    required this.name,
+    this.defaultValue = '',
+    required this.values,
+    this.parentKey = '',
+    this.parentValues = const [],
+  });
+
+  final String key, name, defaultValue, parentKey;
+  final List<CatalogCategory> values;
+  final List<String> parentValues;
+
+  bool active(Map<String, String> selected) =>
+      parentKey.isEmpty || parentValues.contains(selected[parentKey]);
+
+  factory CatalogCategoryFilter.fromJson(Map<String, dynamic> json) =>
+      CatalogCategoryFilter(
+        key: json['key'] as String? ?? '',
+        name: json['name'] as String? ?? '',
+        defaultValue: json['default'] as String? ?? '',
+        parentKey: json['parentKey'] as String? ?? '',
+        parentValues: (json['parentValues'] as List? ?? const [])
+            .cast<String>(),
+        values: [
+          for (final value in json['values'] as List? ?? const [])
+            if (value is Map)
+              CatalogCategory.fromJson(Map<String, dynamic>.from(value)),
+        ],
       );
 }
 
@@ -333,11 +450,11 @@ class PlaybackPlan {
     this.quality = 0,
     this.qualities = const [],
     this.session = '',
-    this.danmakuId = '',
     this.prefetchedBytes = 0,
     this.expiresAt = 0,
     this.routeIndex = 0,
     this.routeCount = 1,
+    this.routeNames = const [],
     this.local = false,
   });
   final String url;
@@ -346,13 +463,17 @@ class PlaybackPlan {
   final int quality;
   final List<int> qualities;
   final String session;
-  final String danmakuId;
   final int prefetchedBytes;
   final int expiresAt;
   final int routeIndex;
   final int routeCount;
+  final List<String> routeNames;
   final bool local;
   bool get hasAlternative => session.isNotEmpty && routeIndex + 1 < routeCount;
+  String routeLabel(int index) =>
+      index >= 0 && index < routeNames.length && routeNames[index].isNotEmpty
+      ? routeNames[index]
+      : '线路 ${index + 1}';
   factory PlaybackPlan.fromJson(Map<String, dynamic> json) => PlaybackPlan(
     url: json['url'] as String? ?? '',
     local: json['local'] == true,
@@ -364,13 +485,15 @@ class PlaybackPlan {
     qualities: (json['qualities'] as List? ?? []).map(intValue).toSet().toList()
       ..sort((a, b) => b.compareTo(a)),
     session: json['session'] as String? ?? '',
-    danmakuId: json['danmakuId'] as String? ?? '',
     prefetchedBytes: intValue(json['prefetchedBytes']),
     expiresAt: intValue(json['expiresAt']),
     routeIndex: intValue(json['routeIndex']),
     routeCount: intValue(json['routeCount']) > 0
         ? intValue(json['routeCount'])
         : 1,
+    routeNames: (json['routeNames'] as List? ?? [])
+        .map((value) => value?.toString() ?? '')
+        .toList(),
   );
 }
 

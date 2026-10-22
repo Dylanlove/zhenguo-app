@@ -63,10 +63,7 @@ func migrateDuanjuPayloadKey(drama nativeDrama) nativeDrama {
 		if id, intro, found := strings.Cut(sourceID, "@"); found {
 			key = duanjuKeyWithPayload(id, intro)
 		}
-	case sourceFanguo:
-		if id, reference, found := strings.Cut(sourceID, "#"); found {
-			key = duanjuKeyWithPayload(id, reference)
-		}
+
 	}
 	if key == sourceID {
 		return drama

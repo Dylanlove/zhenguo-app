@@ -118,6 +118,38 @@ func TestNativeDownloadsOriginalBytesPersistenceAndLocalPriority(t *testing.T) {
 	}
 }
 
+func TestNativeDownloadCancellationStopsBufferedResponse(t *testing.T) {
+	data := bytes.Repeat([]byte("synthetic-media"), 65536)
+	manager := downloadTestManager(t)
+	manager.engine.downloader.client.Transport = sourceFixtureTransport(func(request *http.Request) (*http.Response, error) {
+		response := sourceFixtureResponse(request, http.StatusOK, string(data))
+		response.Header.Set("Content-Type", "video/mp4")
+		response.Header.Set("ETag", `"buffered"`)
+		return response, nil
+	})
+	target := filepath.Join(manager.root, "buffered.mp4")
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	updates := 0
+	_, err := manager.downloadFile(ctx, "https://media.example.test/fixture.mp4", "", target, false, func(received, total int64) {
+		updates++
+		cancel()
+	})
+	if !errors.Is(err, context.Canceled) {
+		t.Fatal("buffered download did not report cancellation", err)
+	}
+	part, err := os.Stat(target + ".part")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if updates != 1 || part.Size() <= 0 || part.Size() >= int64(len(data)) {
+		t.Fatal("cancelled download kept draining its response", updates, part.Size())
+	}
+	if _, err := os.Stat(target); !os.IsNotExist(err) {
+		t.Fatal("cancelled download published a complete file", err)
+	}
+}
+
 func TestNativeDownloadRangeResumeAndAddressIsolation(t *testing.T) {
 	data := bytes.Repeat([]byte("0123456789abcdef"), 65536)
 	var mu sync.Mutex

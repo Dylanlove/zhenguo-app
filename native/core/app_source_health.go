@@ -21,6 +21,7 @@ type nativeHealthStep struct {
 	HTTPStatus int    `json:"httpStatus,omitempty"`
 	ElapsedMS  int64  `json:"elapsedMs"`
 	CFRay      string `json:"cfRay,omitempty"`
+	Code       string `json:"code,omitempty"`
 }
 
 type nativeSourceHealth struct {
@@ -96,6 +97,7 @@ func (engine *nativeEngine) checkSource(ctx context.Context, source string, sele
 			if errors.As(err, &backoff) {
 				step.HTTPStatus, step.Host = backoff.status, backoff.host
 			}
+			step.Code = diagnosticFailureCode(err, step.HTTPStatus)
 		}
 		report.Steps = append(report.Steps, step)
 		publish()
@@ -104,14 +106,26 @@ func (engine *nativeEngine) checkSource(ctx context.Context, source string, sele
 	var page nativeCatalogResult
 	if !run("入口与目录", func() (string, error) {
 		var err error
-		page, err = engine.nativeCatalog(ctx, nativeInput{Source: source, Page: 1, Force: true})
+		if source == sourceHongguo {
+			var items []Drama
+			items, err = engine.downloader.fetchHongguoAppCatalog(context.WithValue(ctx, hongguoCatalogProbeKey{}, true))
+			for _, drama := range items {
+				page.Items = append(page.Items, nativeNormalize(drama))
+			}
+		} else {
+			page, err = engine.nativeCatalog(ctx, nativeInput{Source: source, Page: 1, Force: true})
+		}
 		if err == nil && page.Warning != "" {
 			err = errors.New(page.Warning)
 		}
 		if err == nil && len(page.Items) == 0 {
 			err = errors.New("入口可达，但没有解析到有效剧集")
 		}
-		return fmt.Sprintf("已解析 %d 部剧", len(page.Items)), err
+		message := fmt.Sprintf("已解析 %d 部剧", len(page.Items))
+		if source == sourceHongguo {
+			message = "红果 App 三类目录：" + message
+		}
+		return message, err
 	}) || !playback {
 		return failure
 	}
@@ -150,6 +164,12 @@ func (engine *nativeEngine) checkSource(ctx context.Context, source string, sele
 		media, err = engine.downloader.resolveProviderMedia(ctx, Task{DramaID: drama.ID, Chapter: chapter, Index: 1})
 		if err != nil {
 			return "", err
+		}
+		if isFilmProviderSource(source) {
+			media, err = engine.downloader.prepareWebProviderMedia(ctx, media, "影视站源")
+			if err != nil {
+				return "", err
+			}
 		}
 		ctx = providerMediaContext(ctx, media.credentials)
 		keyURL, segmentURL, err = engine.downloader.sourceProbeResources(ctx, media)

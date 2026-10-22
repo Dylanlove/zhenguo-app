@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 
 import 'app_layout.dart';
+import 'danmaku_settings.dart';
 import 'glass_panel.dart';
 import 'local_store.dart';
 import 'playback_preferences.dart';
@@ -26,6 +27,27 @@ class PlaybackSettingsScreen extends StatelessWidget {
             child: ListView(
               padding: const EdgeInsets.all(16),
               children: [
+                ListTile(
+                  key: const ValueKey('playback-danmaku-settings-entry'),
+                  leading: const Icon(Icons.subtitles_outlined),
+                  title: const Text('弹幕设置'),
+                  subtitle: Text(
+                    danmakuSettingsSummary(store),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  trailing: const Icon(Icons.chevron_right_rounded),
+                  onTap: !enabled
+                      ? null
+                      : () => showDialog<void>(
+                          context: context,
+                          builder: (_) => DanmakuSettingsPanel(
+                            store: store,
+                            television: AppLayout.isTelevision(context),
+                          ),
+                        ),
+                ),
+                const Divider(height: 32),
                 ListTile(
                   title: const Text('长按倍速'),
                   subtitle: const Text('长按画面任意位置临时倍速播放，松开恢复原倍速。'),
@@ -144,19 +166,6 @@ class PlaybackSettingsScreen extends StatelessWidget {
                           context,
                           () => store.setPlaybackPreferences(
                             preferences.copyWith(preload: value),
-                          ),
-                        ),
-                ),
-                SwitchListTile(
-                  value: preferences.danmaku,
-                  title: const Text('显示弹幕'),
-                  subtitle: const Text('打开视频时默认开启弹幕，播放中可随时开关。'),
-                  onChanged: !enabled
-                      ? null
-                      : (value) => saveUserChange(
-                          context,
-                          () => store.setPlaybackPreferences(
-                            preferences.copyWith(danmaku: value),
                           ),
                         ),
                 ),

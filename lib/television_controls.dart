@@ -5,6 +5,9 @@ import 'package:flutter/services.dart';
 import 'package:media_kit/media_kit.dart';
 
 import 'models.dart';
+import 'hongguo_series.dart';
+import 'player_series.dart';
+import 'player_chrome.dart';
 import 'playback_preferences.dart';
 import 'video_enhancement.dart';
 import 'video_enhancement_preferences.dart';
@@ -28,10 +31,19 @@ class TelevisionControls extends StatefulWidget {
     required this.onBack,
     this.onSleepTimer,
     this.sleepTimerLabel = '',
+    this.danmakuEnabled = false,
+    this.onDanmaku,
+    this.onDanmakuSettings,
     this.enhancement,
+    this.subtitle,
+    this.episodeNumber,
+    this.episodeCount,
   });
   final Player player;
   final String title;
+  final String? subtitle;
+  final int? episodeNumber;
+  final int? episodeCount;
   final bool enabled;
   final bool showOnPlaybackReady;
   final VoidCallback onTogglePlayback;
@@ -43,6 +55,9 @@ class TelevisionControls extends StatefulWidget {
   final VoidCallback onBack;
   final Future<void> Function()? onSleepTimer;
   final String sleepTimerLabel;
+  final bool danmakuEnabled;
+  final Future<void> Function()? onDanmaku;
+  final Future<void> Function()? onDanmakuSettings;
   final VideoEnhancementController? enhancement;
 
   @override
@@ -54,6 +69,8 @@ class _TelevisionControlsState extends State<TelevisionControls> {
   final _play = FocusNode(debugLabel: 'tv-player-play');
   final _episodes = FocusNode(debugLabel: 'tv-player-episodes');
   final _settings = FocusNode(debugLabel: 'tv-player-settings');
+  final _danmakuToggle = FocusNode(debugLabel: 'tv-player-danmaku-toggle');
+  final _danmakuSettings = FocusNode(debugLabel: 'tv-player-danmaku-settings');
   final _progress = FocusNode(debugLabel: 'tv-player-progress');
   final _subscriptions = <StreamSubscription<dynamic>>[];
   Timer? _hideTimer;
@@ -244,7 +261,15 @@ class _TelevisionControlsState extends State<TelevisionControls> {
     for (final subscription in _subscriptions) {
       subscription.cancel();
     }
-    for (final node in [_surface, _play, _episodes, _settings, _progress]) {
+    for (final node in [
+      _surface,
+      _play,
+      _episodes,
+      _settings,
+      _progress,
+      _danmakuToggle,
+      _danmakuSettings,
+    ]) {
       node.dispose();
     }
     super.dispose();
@@ -279,6 +304,10 @@ class _TelevisionControlsState extends State<TelevisionControls> {
     final state = widget.player.state;
     final duration = state.duration.inMilliseconds / 1000;
     final position = state.position.inMilliseconds / 1000;
+    final episodeChrome = widget.subtitle != null;
+    final safePadding = MediaQuery.paddingOf(context);
+    final topInset = episodeChrome ? safePadding.top + 24 : 12.0;
+    final bottomInset = episodeChrome ? safePadding.bottom + 24 : 18.0;
     return ExcludeFocus(
       excluding: !widget.enabled,
       child: Focus(
@@ -303,30 +332,47 @@ class _TelevisionControlsState extends State<TelevisionControls> {
                       padding: const EdgeInsets.all(20),
                       child: Text(
                         '${formatPosition(position)} / ${formatPosition(duration)}',
-                        style: const TextStyle(fontSize: 26),
+                        style: TextStyle(
+                          fontSize: 26,
+                          color: episodeChrome ? Colors.white : null,
+                        ),
                       ),
                     ),
                   ),
                 ),
               if (_visible && widget.enabled) ...[
-                const DecoratedBox(
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      colors: [
-                        Color(0xCC000000),
-                        Colors.transparent,
-                        Color(0xEE000000),
-                      ],
-                      stops: [0, .4, 1],
+                IgnorePointer(
+                  child: LayoutBuilder(
+                    builder: (context, constraints) => DecoratedBox(
+                      decoration: BoxDecoration(
+                        gradient: episodeChrome
+                            ? playerChromeGradient(
+                                height: constraints.maxHeight,
+                                topInset: topInset,
+                                bottomInset: bottomInset,
+                                topExtent: 104,
+                                bottomExtent: 260,
+                                bottomHoldExtent: 200,
+                                bottomStartLimit: .4,
+                              )
+                            : const LinearGradient(
+                                begin: Alignment.topCenter,
+                                end: Alignment.bottomCenter,
+                                colors: [
+                                  Color(0xCC000000),
+                                  Colors.transparent,
+                                  Color(0xEE000000),
+                                ],
+                                stops: [0, .4, 1],
+                              ),
+                      ),
                     ),
                   ),
                 ),
                 Positioned(
-                  top: 12,
-                  left: 24,
-                  right: 24,
+                  top: topInset,
+                  left: episodeChrome ? safePadding.left + 32 : 24,
+                  right: episodeChrome ? safePadding.right + 32 : 24,
                   child: Row(
                     children: [
                       RemoteButton(
@@ -337,26 +383,51 @@ class _TelevisionControlsState extends State<TelevisionControls> {
                       ),
                       const SizedBox(width: 16),
                       Expanded(
-                        child: Text(
-                          widget.title,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            fontSize: 22,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
+                        child: episodeChrome
+                            ? PlayerChromeTitle(
+                                title: widget.title,
+                                subtitle: widget.subtitle!,
+                                titleSize: 24,
+                                subtitleSize: 16,
+                              )
+                            : Text(
+                                widget.title,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  fontSize: 22,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
                       ),
                     ],
                   ),
                 ),
                 Positioned(
-                  left: 28,
-                  right: 28,
-                  bottom: 18,
+                  left: episodeChrome ? safePadding.left + 32 : 28,
+                  right: episodeChrome ? safePadding.right + 32 : 28,
+                  bottom: bottomInset,
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
+                      if (episodeChrome &&
+                          widget.episodeNumber != null &&
+                          widget.episodeCount != null)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 12),
+                          child: Align(
+                            alignment: Alignment.centerLeft,
+                            child: PlayerEpisodeCounter(
+                              key: const ValueKey('tv-player-episode-counter'),
+                              number: widget.episodeNumber!,
+                              count: widget.episodeCount!,
+                              numberSize: 56,
+                              labelSize: 16,
+                              countSize: 17,
+                              leftInset: 0,
+                            ),
+                          ),
+                        ),
                       RemoteTarget(
                         key: const ValueKey('tv-progress'),
                         label: '播放进度，左右键快进或后退十秒',
@@ -390,7 +461,13 @@ class _TelevisionControlsState extends State<TelevisionControls> {
                               children: [
                                 Text(
                                   '${formatPosition(position)} / ${formatPosition(duration)}',
-                                  style: const TextStyle(fontSize: 16),
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    color: episodeChrome ? Colors.white : null,
+                                    fontFeatures: const [
+                                      FontFeature.tabularFigures(),
+                                    ],
+                                  ),
                                 ),
                                 const Spacer(),
                                 const Text(
@@ -466,6 +543,41 @@ class _TelevisionControlsState extends State<TelevisionControls> {
                                   );
                                 },
                               ),
+                            RemoteButton(
+                              key: const ValueKey('tv-settings'),
+                              label: '播放设置',
+                              icon: Icons.tune_rounded,
+                              focusNode: _settings,
+                              onPressed: () =>
+                                  _openPanel(widget.onSettings, _settings),
+                            ),
+                            if (widget.onDanmaku != null)
+                              RemoteButton(
+                                key: const ValueKey('tv-danmaku-toggle'),
+                                focusNode: _danmakuToggle,
+                                selected: widget.danmakuEnabled,
+                                label: widget.danmakuEnabled
+                                    ? '弹 · 开'
+                                    : '弹 · 关',
+                                icon: widget.danmakuEnabled
+                                    ? Icons.subtitles_rounded
+                                    : Icons.subtitles_off_outlined,
+                                onPressed: () => _openPanel(
+                                  widget.onDanmaku!,
+                                  _danmakuToggle,
+                                ),
+                              ),
+                            if (widget.onDanmakuSettings != null)
+                              RemoteButton(
+                                key: const ValueKey('tv-danmaku-settings'),
+                                focusNode: _danmakuSettings,
+                                label: '弹幕设置',
+                                icon: Icons.tune_rounded,
+                                onPressed: () => _openPanel(
+                                  widget.onDanmakuSettings!,
+                                  _danmakuSettings,
+                                ),
+                              ),
                             if (widget.onSleepTimer != null)
                               RemoteButton(
                                 key: const ValueKey('tv-sleep-timer'),
@@ -476,14 +588,6 @@ class _TelevisionControlsState extends State<TelevisionControls> {
                                 onPressed: () =>
                                     _openPanel(widget.onSleepTimer!, _settings),
                               ),
-                            RemoteButton(
-                              key: const ValueKey('tv-settings'),
-                              label: '播放设置',
-                              icon: Icons.tune_rounded,
-                              focusNode: _settings,
-                              onPressed: () =>
-                                  _openPanel(widget.onSettings, _settings),
-                            ),
                           ],
                         ),
                       ),
@@ -509,9 +613,16 @@ class TelevisionEpisodeDialog extends StatelessWidget {
     super.key,
     required this.episodes,
     required this.currentIndex,
+    this.seriesEntries = const [],
+    this.currentDramaId = '',
+    this.onSeason,
   });
   final List<Episode> episodes;
   final int currentIndex;
+
+  final List<HongguoSeriesEntry> seriesEntries;
+  final String currentDramaId;
+  final ValueChanged<Drama>? onSeason;
 
   @override
   Widget build(BuildContext context) => AlertDialog(
@@ -519,24 +630,37 @@ class TelevisionEpisodeDialog extends StatelessWidget {
     content: SizedBox(
       width: 700,
       height: MediaQuery.sizeOf(context).height * .55,
-      child: LayoutBuilder(
-        builder: (context, constraints) => RemoteGrid(
-          itemKeys: episodes.map((episode) => '${episode.number}').toList(),
-          columns: ((constraints.maxWidth - 12) / 96).floor().clamp(1, 8),
-          itemExtent: 64,
-          initialIndex: currentIndex,
-          autofocus: true,
-          padding: const EdgeInsets.all(6),
-          itemBuilder: (_, index, node, onFocus) => RemoteEpisodeButton(
-            key: ValueKey('tv-select-episode-${episodes[index].number}'),
-            number: episodes[index].number,
-            vip: episodes[index].vip,
-            current: index == currentIndex,
-            focusNode: node,
-            onFocus: onFocus,
-            onPressed: () => Navigator.pop(context, index),
+      child: Column(
+        children: [
+          PlayerSeriesBar(
+            entries: seriesEntries,
+            currentDramaId: currentDramaId,
+            onSelected: onSeason,
           ),
-        ),
+          Expanded(
+            child: LayoutBuilder(
+              builder: (context, constraints) => RemoteGrid(
+                itemKeys: episodes
+                    .map((episode) => '${episode.number}')
+                    .toList(),
+                columns: ((constraints.maxWidth - 12) / 96).floor().clamp(1, 8),
+                itemExtent: 64,
+                initialIndex: currentIndex,
+                autofocus: true,
+                padding: const EdgeInsets.all(6),
+                itemBuilder: (_, index, node, onFocus) => RemoteEpisodeButton(
+                  key: ValueKey('tv-select-episode-${episodes[index].number}'),
+                  number: episodes[index].number,
+                  vip: episodes[index].vip,
+                  current: index == currentIndex,
+                  focusNode: node,
+                  onFocus: onFocus,
+                  onPressed: () => Navigator.pop(context, index),
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     ),
     actions: [
@@ -553,14 +677,12 @@ class TelevisionPlaybackSetting {
     this.speed,
     this.quality,
     this.autoAdvance,
-    this.danmaku,
     this.preload,
     this.enhancement,
   });
   final double? speed;
   final int? quality;
   final bool? autoAdvance;
-  final bool? danmaku;
   final bool? preload;
   final VideoEnhancementPreferences? enhancement;
 }
@@ -573,30 +695,44 @@ class TelevisionSettingsDialog extends StatelessWidget {
     required this.qualities,
     required this.favorite,
     required this.onFavorite,
+    this.sourceQuality = 0,
+    this.actualResolution,
+    this.local = false,
     this.autoAdvance = true,
-    this.danmaku = true,
     this.showDanmaku = false,
     this.danmakuStatus = '',
-    this.onRetryDanmaku,
+    this.onDanmakuSettings,
     this.preload = true,
     this.preloadStatus = '',
     this.enhancement,
     this.onCompareEnhancement,
+    this.routeIndex = 0,
+    this.routeCount = 0,
+    this.routeLabel,
+    this.onRoute,
+    this.onDiagnostics,
   });
   final double speed;
   final int quality;
+  final int sourceQuality;
+  final String? actualResolution;
+  final bool local;
   final List<int> qualities;
   final bool favorite;
   final VoidCallback onFavorite;
   final bool autoAdvance;
-  final bool danmaku;
   final bool showDanmaku;
   final String danmakuStatus;
-  final VoidCallback? onRetryDanmaku;
+  final VoidCallback? onDanmakuSettings;
   final bool preload;
   final String preloadStatus;
   final VideoEnhancementController? enhancement;
   final VoidCallback? onCompareEnhancement;
+  final int routeIndex;
+  final int routeCount;
+  final String Function(int)? routeLabel;
+  final ValueChanged<int>? onRoute;
+  final VoidCallback? onDiagnostics;
 
   @override
   Widget build(BuildContext context) => AlertDialog(
@@ -630,6 +766,21 @@ class TelevisionSettingsDialog extends StatelessWidget {
             const SizedBox(height: 20),
             const Text('清晰度', style: TextStyle(fontSize: 18)),
             const SizedBox(height: 8),
+            Text(
+              actualResolution == null ? '实际分辨率待识别' : '实际播放：$actualResolution',
+              style: const TextStyle(fontSize: 14),
+            ),
+            if (local || sourceQuality > 0)
+              Text(
+                local ? '本集正在播放本地文件，画质偏好用于后续在线播放。' : '源站档位：${sourceQuality}P',
+                style: const TextStyle(fontSize: 14),
+              ),
+            const SizedBox(height: 8),
+            Text(
+              '画质偏好：${quality == 0 ? '自动（优先高清）' : '${quality}P'}',
+              style: const TextStyle(fontSize: 14),
+            ),
+            const SizedBox(height: 8),
             Wrap(
               spacing: 8,
               runSpacing: 8,
@@ -649,7 +800,35 @@ class TelevisionSettingsDialog extends StatelessWidget {
                   ),
               ],
             ),
+            if (quality > 0 && !qualities.contains(quality))
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Text(
+                  qualities.any((value) => value > 0)
+                      ? '已保存 ${quality}P 偏好，本集暂无此画质。'
+                      : '已保存 ${quality}P 偏好，本集未提供可切换的清晰度档位。',
+                  style: const TextStyle(fontSize: 14),
+                ),
+              ),
             const SizedBox(height: 20),
+            if (onRoute != null && routeCount > 1) ...[
+              const Text('播放线路', style: TextStyle(fontSize: 18)),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  for (var route = 0; route < routeCount; route++)
+                    RemoteButton(
+                      key: ValueKey('tv-route-$route'),
+                      label: routeLabel?.call(route) ?? '线路 ${route + 1}',
+                      selected: route == routeIndex,
+                      onPressed: () => onRoute!(route),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 20),
+            ],
             if (enhancement != null)
               VideoEnhancementSettings(
                 controller: enhancement!,
@@ -662,21 +841,13 @@ class TelevisionSettingsDialog extends StatelessWidget {
               ),
             if (showDanmaku) ...[
               RemoteButton(
-                key: const ValueKey('tv-danmaku-enabled'),
-                label: danmaku ? '弹幕：开' : '弹幕：关',
-                onPressed: () => Navigator.pop(
-                  context,
-                  TelevisionPlaybackSetting(danmaku: !danmaku),
-                ),
+                key: const ValueKey('tv-menu-danmaku-settings'),
+                label: '弹幕设置',
+                icon: Icons.subtitles_outlined,
+                onPressed: onDanmakuSettings,
               ),
               const SizedBox(height: 8),
               Text(danmakuStatus, style: const TextStyle(fontSize: 14)),
-              if (onRetryDanmaku != null)
-                RemoteButton(
-                  key: const ValueKey('tv-danmaku-retry'),
-                  label: '重试弹幕',
-                  onPressed: onRetryDanmaku,
-                ),
               const SizedBox(height: 20),
             ],
             RemoteButton(
@@ -698,6 +869,15 @@ class TelevisionSettingsDialog extends StatelessWidget {
             ),
             const SizedBox(height: 8),
             Text(preloadStatus, style: const TextStyle(fontSize: 14)),
+            if (onDiagnostics != null) ...[
+              const SizedBox(height: 16),
+              RemoteButton(
+                key: const ValueKey('tv-playback-diagnostics'),
+                label: '播放诊断报告 / 扫码',
+                icon: Icons.qr_code_rounded,
+                onPressed: onDiagnostics,
+              ),
+            ],
             const SizedBox(height: 20),
             RemoteButton(
               label: favorite ? '取消追剧' : '加入追剧',

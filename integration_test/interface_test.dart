@@ -25,7 +25,10 @@ void main() {
       await SystemChrome.setPreferredOrientations([
         DeviceOrientation.portraitUp,
       ]);
-      SharedPreferences.setMockInitialValues({});
+      SharedPreferences.setMockInitialValues({
+        'interfaceStyle': 'standard',
+        'greenMode': false,
+      });
       final store = LocalStore(await SharedPreferences.getInstance());
       final repository = InterfaceRepository();
 
@@ -101,7 +104,9 @@ void main() {
       await store.setThemeMode('dark');
       await tester.pumpAndSettle();
       await capture('interface-dark-catalog');
-      await tester.tap(find.byKey(const ValueKey('bottom-nav-3')));
+      await tester.tap(
+        find.byKey(ValueKey('bottom-nav-${store.canShowLive ? 3 : 2}')),
+      );
       await tester.pumpAndSettle();
       await capture('interface-dark-downloads');
       await store.setThemeMode('light');

@@ -13,7 +13,52 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 )
+
+func TestInsecureTLSClientKeepsBrowserSessionsIsolated(t *testing.T) {
+	server := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
+		io.WriteString(w, "synthetic-media-only")
+	}))
+	server.EnableHTTP2 = true
+	server.StartTLS()
+	t.Cleanup(server.Close)
+	d := sourceFixtureDownloader(t, nil)
+	d.cfg.HuangguoVideoURL = server.URL
+	d.proxyRouter = &proxyRouter{}
+	transport := newHuangguoBrowserTransport(http.DefaultTransport, d)
+	original := &http.Client{Transport: transport, Timeout: 3 * time.Second}
+	t.Cleanup(original.CloseIdleConnections)
+	request, err := http.NewRequest(http.MethodGet, server.URL+"/segment.ts", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	session, err := transport.client(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	compatible, ok := insecureTLSClient(original)
+	if !ok {
+		t.Fatal("browser transport could not create a compatibility session")
+	}
+	t.Cleanup(compatible.CloseIdleConnections)
+	response, err := compatible.Do(request)
+	if err != nil {
+		t.Fatal("compatibility session rejected the synthetic certificate", err)
+	}
+	body, err := io.ReadAll(response.Body)
+	response.Body.Close()
+	if err != nil || response.StatusCode != http.StatusOK || string(body) != "synthetic-media-only" {
+		t.Fatal("compatibility session did not read synthetic media", err, response.StatusCode)
+	}
+	if response, err := original.Do(request); err == nil {
+		response.Body.Close()
+		t.Fatal("compatibility session disabled validation on the original client")
+	}
+	if current, err := transport.client(request); err != nil || current != session {
+		t.Fatal("compatibility session replaced the original browser session", err)
+	}
+}
 
 func TestParseAIVideoInitialDataPrefersRequestedEpisode(t *testing.T) {
 	body := `<script id="videoInitialData" type="application/json">{"id":"365","ep":"2","videoSrc":"https://media.example/episode-1.m3u8","epPlaySrcs":{"1":"https://media.example/episode-1.m3u8","2":"https://media.example/episode-2.m3u8"}}</script>`

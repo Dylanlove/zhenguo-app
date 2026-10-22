@@ -241,6 +241,7 @@ func (engine *nativeEngine) nativeLibraryImport(document nativeLibraryExchange) 
 				continue
 			}
 			before := previous[position]
+			drama.Cover = firstNonEmpty(before.Cover, drama.Cover)
 			merged := mergeNativeDrama(drama, before)
 			if !reflect.DeepEqual(merged, before) {
 				previous[position] = merged

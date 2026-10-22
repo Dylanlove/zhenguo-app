@@ -6,12 +6,12 @@ import (
 	"encoding/hex"
 	"errors"
 	"sort"
+	"strconv"
 	"time"
 )
 
 type nativePlaybackChoice struct {
-	danmakuSeries string
-	danmakuVideo  string
+	source        string
 	media         []providerMedia
 	index         int
 	qualities     []int
@@ -27,7 +27,7 @@ func nativePlaybackChoices(media providerMedia, quality int) nativePlaybackChoic
 		if !isProviderHTTPMediaURL(option.URL) {
 			continue
 		}
-		identity := option.URL + "\x00" + option.Referer + "\x00" + hex.EncodeToString(option.CENCKey) + "\x00" + hex.EncodeToString(option.HLSKey)
+		identity := option.URL + "\x00" + option.Referer + "\x00" + hex.EncodeToString(option.CENCKey) + "\x00" + hex.EncodeToString(option.HLSKey) + "\x00" + option.RouteName + "\x00" + strconv.Itoa(option.Quality)
 		if seen[identity] {
 			continue
 		}
@@ -72,10 +72,25 @@ func (engine *nativeEngine) nativeOpenPlayback(ctx context.Context, choice nativ
 		return nativePlan{}, errors.New("无法初始化播放会话")
 	}
 	plan := nativePlan{
-		DanmakuID: choice.danmakuVideo,
-		URL:       media.URL, Headers: map[string]string{"User-Agent": userAgent, "Referer": media.Referer},
+		URL: media.URL, Headers: map[string]string{"User-Agent": userAgent, "Referer": media.Referer},
 		Key: hex.EncodeToString(media.CENCKey), Quality: media.Quality, Qualities: choice.qualities,
 		RouteIndex: choice.index, RouteCount: len(choice.media), Session: hex.EncodeToString(tokenBytes),
+	}
+	if media.credentials != nil {
+		if media.credentials.userAgent != "" {
+			plan.Headers["User-Agent"] = media.credentials.userAgent
+		}
+		if media.credentials.referer != "" {
+			plan.Headers["Referer"] = media.credentials.referer
+		}
+		if media.credentials.omitReferer {
+			delete(plan.Headers, "Referer")
+		}
+	}
+	if media.RouteName != "" {
+		for _, option := range choice.media {
+			plan.RouteNames = append(plan.RouteNames, option.RouteName)
+		}
 	}
 	if media.credentials != nil && !media.credentials.expires.IsZero() {
 		if !time.Now().Before(media.credentials.expires) {
@@ -84,7 +99,7 @@ func (engine *nativeEngine) nativeOpenPlayback(ctx context.Context, choice nativ
 		plan.ExpiresAt = media.credentials.expires.UnixMilli()
 	}
 	choice.streamSession = ""
-	{
+	if !providerMediaDASHURL(media.URL) {
 		engine.mu.Lock()
 		if engine.stream == nil {
 			engine.stream, err = newNativeStreamServer(engine.downloader)
@@ -141,6 +156,20 @@ func (engine *nativeEngine) nativeNextPlayback(ctx context.Context, session stri
 		return nativePlan{}, errors.New("播放线路已失效，请重新解析播放")
 	}
 	choice.index++
+	return engine.nativeOpenPlayback(ctx, choice)
+}
+
+func (engine *nativeEngine) nativeSelectFilmRoute(ctx context.Context, session string, route int) (nativePlan, error) {
+	engine.mu.Lock()
+	choice, exists := engine.playbacks[session]
+	engine.mu.Unlock()
+	if !exists {
+		return nativePlan{}, errors.New("播放线路已失效，请重新解析播放")
+	}
+	if !isFilmProviderSource(choice.source) || !nativeSourceAvailable(choice.source) {
+		return nativePlan{}, errNativeBuildSource
+	}
+	choice.index = route
 	return engine.nativeOpenPlayback(ctx, choice)
 }
 

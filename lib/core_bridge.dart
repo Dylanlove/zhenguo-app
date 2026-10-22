@@ -10,11 +10,11 @@ import 'package:path/path.dart' as path;
 import 'package:path_provider/path_provider.dart';
 
 import 'models.dart';
-import 'danmaku_models.dart';
 import 'background_downloads.dart';
 import 'local_store.dart';
 import 'app_build.dart';
 import 'source_status.dart';
+import 'playback_diagnostics.dart';
 import 'ranking_models.dart';
 import 'cover_decoder.dart';
 import 'catalog_updates.dart';
@@ -87,6 +87,7 @@ const unlockedActions = <String>{
 };
 
 abstract class AppRepository {
+  final playbackDiagnostics = PlaybackDiagnostics();
   Future<Map<String, dynamic>> ysp(
     String command,
     Map<String, dynamic> payload,
@@ -113,12 +114,6 @@ abstract class AppRepository {
     int quality = 0,
     bool online = false,
   }) async => null;
-  Future<void> cancelDanmaku() async {}
-  Future<DanmakuPage> danmaku(
-    PlaybackPlan plan, {
-    required int startMs,
-    required int durationMs,
-  }) async => throw AppFailure('当前环境不支持弹幕');
   Future<void> cancelCatalog() async {}
   Future<void> cancelSuggestions() async {}
   Future<void> cancelRecommendations() async {}
@@ -217,6 +212,8 @@ abstract class AppRepository {
   Future<DramaDetail> detail(Drama drama);
   Future<PlaybackPlan> resolve(Drama drama, Episode episode, {int quality = 0});
   Future<PlaybackPlan> fallback(PlaybackPlan current);
+  Future<PlaybackPlan> selectRoute(PlaybackPlan current, int route) async =>
+      throw AppFailure('当前播放器不支持手动切换线路');
   Future<void> cancelPlayback();
   Future<void> release(String session);
 }
@@ -334,9 +331,6 @@ class NativeRepository extends AppRepository {
   }
 
   @override
-  Future<void> cancelDanmaku() => _cancelReads('danmaku');
-
-  @override
   Future<void> cancelPreload() => _cancelReads('preload');
 
   @override
@@ -355,29 +349,6 @@ class NativeRepository extends AppRepository {
       'force': online || access?.canDownload == false,
     }),
   );
-
-  @override
-  Future<DanmakuPage> danmaku(
-    PlaybackPlan plan, {
-    required int startMs,
-    required int durationMs,
-  }) async {
-    _authorize('hongguo');
-    if (plan.local || plan.session.isEmpty || plan.danmakuId.isEmpty) {
-      throw AppFailure('本集暂不支持弹幕');
-    }
-    return DanmakuPage.fromJson(
-      await _read('danmaku', {
-        'action': 'danmaku',
-        'playbackSession': plan.session,
-        'startMs': startMs,
-        'durationMs': durationMs,
-      }),
-      episodeId: plan.danmakuId,
-      startMs: startMs,
-      durationMs: durationMs,
-    );
-  }
 
   @override
   Future<void> cancelCatalog() => _cancelReads('catalog-');
@@ -630,8 +601,7 @@ class NativeRepository extends AppRepository {
       }
       if (action == 'recommendations' ||
           action == 'cachedRecommendations' ||
-          action == 'suggestions' ||
-          action == 'danmaku') {
+          action == 'suggestions') {
         _authorize('hongguo');
       }
       if ({
@@ -679,8 +649,6 @@ class NativeRepository extends AppRepository {
       final limit = Duration(
         seconds: action == 'moveDownloads'
             ? 620
-            : action == 'danmaku'
-            ? 15
             : action == 'preload'
             ? 20
             : action == 'libraryImport'
@@ -717,7 +685,6 @@ class NativeRepository extends AppRepository {
             'suggestions',
             'recommendations',
             'metadata',
-            'danmaku',
             'preload',
             'prepareHandoff',
           }.contains(input['action'])) {
@@ -729,7 +696,7 @@ class NativeRepository extends AppRepository {
           }).catchError((Object _) => <String, dynamic>{}),
         );
       }
-      throw AppFailure('站源响应超时，请重试');
+      throw AppFailure('站源响应超时，请重试', code: 'TIMEOUT');
     } catch (_) {
       throw AppFailure('本地核心加载失败，请使用完整安装包重新安装');
     }
@@ -745,6 +712,14 @@ class NativeRepository extends AppRepository {
     if (build['allSources'] != allSourcesEnabled) {
       throw AppFailure('应用与原生核心的站源版本不一致，请使用完整安装包重新安装');
     }
+    try {
+      SourceSite.installCapabilities(
+        build['sources'],
+        build['capabilitySchema'],
+      );
+    } on FormatException catch (error) {
+      throw AppFailure(error.message);
+    }
     if (!background) await BackgroundDownloads.prepare();
     if (!background) {
       SystemProxyMonitor.start((value) async {
@@ -758,6 +733,10 @@ class NativeRepository extends AppRepository {
     String source, {
     bool force = false,
   }) async {
+    _authorize(source);
+    if (SourceSite.byId(source).capabilities?.categories == false) {
+      return const [CatalogCategory.all];
+    }
     final result = await _read('categories-$source', {
       'action': 'categories',
       'source': source,
@@ -877,6 +856,16 @@ class NativeRepository extends AppRepository {
         await _call({
           'action': 'fallback',
           'session': current.session,
+          'sequence': ++_playbackSequence,
+        }),
+      );
+  @override
+  Future<PlaybackPlan> selectRoute(PlaybackPlan current, int route) async =>
+      PlaybackPlan.fromJson(
+        await _call({
+          'action': 'selectRoute',
+          'session': current.session,
+          'route': route,
           'sequence': ++_playbackSequence,
         }),
       );

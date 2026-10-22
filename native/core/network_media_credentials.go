@@ -10,11 +10,12 @@ import (
 )
 
 type providerMediaCredentials struct {
-	cookie    string
-	origin    string
-	referer   string
-	userAgent string
-	expires   time.Time
+	cookie      string
+	origin      string
+	referer     string
+	userAgent   string
+	omitReferer bool
+	expires     time.Time
 }
 
 type providerMediaCredentialsKey struct{}
@@ -49,7 +50,10 @@ func (credentials *providerMediaCredentials) apply(request *http.Request) error 
 	if credentials.userAgent != "" {
 		request.Header.Set("User-Agent", credentials.userAgent)
 	}
-	if credentials.referer != "" {
+	if credentials.omitReferer {
+		request.Header.Del("Referer")
+		request.Header.Del("Origin")
+	} else if credentials.referer != "" {
 		request.Header.Set("Referer", credentials.referer)
 		if address, err := url.Parse(credentials.referer); err == nil {
 			request.Header.Set("Origin", providerMediaOrigin(address))

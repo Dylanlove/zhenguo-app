@@ -1,5 +1,37 @@
 import 'dart:convert';
 
+enum LiveProgrammeState { replay, live, upcoming, expired, unavailable }
+
+class LiveProgramme {
+  const LiveProgramme({
+    required this.channelId,
+    required this.title,
+    required this.start,
+    this.end,
+  });
+
+  final String channelId;
+  final String title;
+  final DateTime start;
+  final DateTime? end;
+
+  String get key => '$channelId:${start.millisecondsSinceEpoch}:$title';
+  Duration? get duration => end?.difference(start);
+
+  LiveProgrammeState stateAt(DateTime now, {required bool supportsCatchup}) {
+    if (start.isAfter(now)) return LiveProgrammeState.upcoming;
+    final finish = end;
+    if (finish != null && finish.isAfter(now)) return LiveProgrammeState.live;
+    if (start.isBefore(now.subtract(const Duration(days: 7)))) {
+      return LiveProgrammeState.expired;
+    }
+    if (!supportsCatchup || finish == null) {
+      return LiveProgrammeState.unavailable;
+    }
+    return LiveProgrammeState.replay;
+  }
+}
+
 class LiveChannel {
   const LiveChannel({
     required this.key,

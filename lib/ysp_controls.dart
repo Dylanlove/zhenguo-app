@@ -1,8 +1,50 @@
 import 'package:flutter/material.dart';
 
+import 'live_epg.dart';
 import 'live_playback.dart';
+import 'live_programme_guide.dart';
 import 'playback_preferences.dart';
 import 'ysp_live.dart';
+
+Future<String?> showYspPlaybackMenu(
+  BuildContext context,
+  LivePlaybackController playback, {
+  String catchupLabel = '7 天回看',
+}) => showModalBottomSheet<String>(
+  context: context,
+  showDragHandle: true,
+  builder: (context) => SafeArea(
+    child: SingleChildScrollView(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          ListTile(
+            leading: const Icon(Icons.high_quality),
+            title: const Text('画质选择'),
+            onTap: () => Navigator.pop(context, 'quality'),
+          ),
+          if (playback.supportsCatchup)
+            ListTile(
+              leading: const Icon(Icons.replay),
+              title: Text(catchupLabel),
+              onTap: () => Navigator.pop(context, 'catchup'),
+            ),
+          if (playback.catchup)
+            ListTile(
+              leading: const Icon(Icons.live_tv),
+              title: const Text('回到直播'),
+              onTap: () => Navigator.pop(context, 'live'),
+            ),
+          ListTile(
+            leading: const Icon(Icons.cast),
+            title: const Text('订阅分享与诊断'),
+            onTap: () => Navigator.pop(context, 'settings'),
+          ),
+        ],
+      ),
+    ),
+  ),
+);
 
 Future<void> showYspQualitySheet(
   BuildContext context,
@@ -11,9 +53,13 @@ Future<void> showYspQualitySheet(
   final selected = await showModalBottomSheet<String>(
     context: context,
     showDragHandle: true,
+    isScrollControlled: true,
+    useSafeArea: true,
     builder: (context) => SafeArea(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
+      top: false,
+      child: ListView(
+        shrinkWrap: true,
+        padding: EdgeInsets.zero,
         children: [
           const ListTile(title: Text('央视频画质')),
           for (final quality in const ['auto', 'best', 'hd'])
@@ -70,6 +116,28 @@ Future<void> showYspSpeedSheet(
 Future<void> showYspCatchupSheet(
   BuildContext context,
   LivePlaybackController playback,
+) => showModalBottomSheet<void>(
+  context: context,
+  showDragHandle: true,
+  isScrollControlled: true,
+  useSafeArea: true,
+  constraints: const BoxConstraints(maxWidth: 720),
+  builder: (context) => FractionallySizedBox(
+    heightFactor: .88,
+    child: SafeArea(
+      top: false,
+      child: LiveProgrammeGuide(
+        playback: playback,
+        onClose: () => Navigator.pop(context),
+        onManualTime: () => showYspManualCatchupSheet(context, playback),
+      ),
+    ),
+  ),
+);
+
+Future<void> showYspManualCatchupSheet(
+  BuildContext context,
+  LivePlaybackController playback,
 ) async {
   final selected = await showModalBottomSheet<({DateTime start, DateTime end})>(
     context: context,
@@ -98,15 +166,15 @@ class _YspCatchupPickerState extends State<_YspCatchupPicker> {
   late DateTime _end = widget.playback.catchupEnd ?? DateTime.now();
   String? _error;
 
-  String _label(DateTime value) =>
-      '${value.year}-${value.month.toString().padLeft(2, '0')}-'
-      '${value.day.toString().padLeft(2, '0')} '
-      '${value.hour.toString().padLeft(2, '0')}:'
-      '${value.minute.toString().padLeft(2, '0')}';
+  String _label(DateTime value) {
+    final local = liveEpgTime(value);
+    return '${local.year}-${local.month.toString().padLeft(2, '0')}-'
+        '${local.day.toString().padLeft(2, '0')} ${liveEpgClock(value)}';
+  }
 
   Future<void> _pick({required bool start}) async {
-    final current = start ? _start : _end;
-    final now = DateTime.now();
+    final current = liveEpgTime(start ? _start : _end);
+    final now = liveEpgTime(DateTime.now());
     final date = await showDatePicker(
       context: context,
       initialDate: current,
@@ -119,13 +187,13 @@ class _YspCatchupPickerState extends State<_YspCatchupPicker> {
       initialTime: TimeOfDay.fromDateTime(current),
     );
     if (time == null || !mounted) return;
-    final selected = DateTime(
+    final selected = DateTime.utc(
       date.year,
       date.month,
       date.day,
       time.hour,
       time.minute,
-    );
+    ).subtract(const Duration(hours: 8));
     setState(() {
       if (start) {
         _start = selected;
@@ -161,11 +229,11 @@ class _YspCatchupPickerState extends State<_YspCatchupPicker> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Text(
-            '${widget.playback.channel?.name ?? '央视频'} · 7 天回看',
+            '${widget.playback.channel?.name ?? '央视频'} · 手动选时',
             style: Theme.of(context).textTheme.titleLarge,
           ),
           const SizedBox(height: 12),
-          const Text('选择节目播放时间。可拖动进度、暂停及调整回看倍速。'),
+          const Text('按北京时间选择最近 7 天内的起止时间。回看支持进度和倍速。'),
           const SizedBox(height: 16),
           OutlinedButton.icon(
             onPressed: () => _pick(start: true),

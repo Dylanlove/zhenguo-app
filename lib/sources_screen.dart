@@ -4,11 +4,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'app_notice.dart';
+import 'app_layout.dart';
 import 'core_bridge.dart';
+import 'diagnostics_screen.dart';
 import 'local_store.dart';
 import 'models.dart';
 import 'remote_widgets.dart';
 import 'source_status.dart';
+import 'playback_diagnostics.dart';
 
 String sourceTimestamp(DateTime? value) {
   if (value == null) return '尚无记录';
@@ -74,7 +77,9 @@ class _SourcesScreenState extends State<SourcesScreen> {
     unawaited(_refresh());
     _timer = Timer.periodic(const Duration(seconds: 1), (_) {
       _ticks++;
-      if (_statuses.values.any((status) => status.retryAt != null)) {
+      if (_statuses.values.any(
+        (status) => status.running || status.retryAt != null,
+      )) {
         setState(() {});
       }
       if (_ticks % 2 == 0 &&
@@ -157,28 +162,40 @@ class _SourcesScreenState extends State<SourcesScreen> {
   }
 
   Future<void> _copy(SourceSite source, SourceStatus status) async {
-    final text = StringBuffer('${source.name}\n');
-    text.writeln(
-      '缓存 ${status.count} 部，更新 ${sourceTimestamp(status.updatedAt)}',
-    );
-    final health = status.health;
-    if (health != null) {
-      text.writeln('${health.label} · ${sourceTimestamp(health.checkedAt)}');
-      if (health.sample.isNotEmpty) text.writeln('检测剧集：${health.sample}');
-      for (final step in health.steps) {
-        text.writeln('${step.name}：${step.message}');
-        text.writeln(
-          '${step.host} HTTP ${step.httpStatus} · ${step.elapsedMs} ms',
-        );
-        if (step.cfRay.isNotEmpty) text.writeln('CF Ray: ${step.cfRay}');
-      }
-    }
-    if (status.error.isNotEmpty) text.writeln(status.error);
-    if (status.storageError.isNotEmpty) text.writeln(status.storageError);
-    await Clipboard.setData(ClipboardData(text: text.toString()));
+    if (!widget.store.allowsSource(source.id)) return;
+    await Clipboard.setData(ClipboardData(text: _report(source, status).text));
     if (mounted) {
       AppNotice.show(context, '诊断信息已复制');
     }
+  }
+
+  DiagnosticReport _report(SourceSite source, SourceStatus? status) =>
+      DiagnosticReport(
+        version: AppLayout.versionOf(context),
+        source: source.id,
+        sourceName: source.name,
+        fingerprint: source.adapterFingerprint,
+        status: status,
+        events: widget.repository.playbackDiagnostics.events(
+          '${widget.store.profile.id}:${widget.store.profileEpoch}',
+          source.id,
+        ),
+      );
+
+  void _openReport(SourceSite source) {
+    if (!widget.store.allowsSource(source.id)) return;
+    final report = _report(source, _statuses[source.id]);
+    final epoch = widget.store.profileEpoch;
+    Navigator.push<void>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => DiagnosticsScreen(
+          store: widget.store,
+          report: report,
+          profileEpoch: epoch,
+        ),
+      ),
+    );
   }
 
   Future<void> _updateAll() async {
@@ -246,7 +263,7 @@ class _SourcesScreenState extends State<SourcesScreen> {
                   const Padding(
                     padding: EdgeInsets.only(bottom: 16),
                     child: Text(
-                      '各站源可分别更新和检测。更新会查找新剧、继续加载一页历史内容，并分批补齐资料；离开此页后任务继续。',
+                      '各站源可分别更新和检测。红果更新会续扫未完成的目录，上一轮结束后重新扫描；已收录剧目保留。其他站源沿用分页更新，离开此页后任务继续。',
                     ),
                   ),
                   if (sources.isEmpty)
@@ -299,16 +316,25 @@ class _SourcesScreenState extends State<SourcesScreen> {
             ),
             const SizedBox(height: 8),
             Text('最近更新：${sourceTimestamp(status?.updatedAt)}'),
-            if (status != null && status.count > 0)
+            if (source.capabilities != null)
               Text(
-                '已加载至第 ${status.page} 页${status.hasMore ? ' · 可继续加载' : ' · 当前分页已加载完'}',
+                source.capabilities!.labels.join(' · '),
+                style: Theme.of(context).textTheme.bodySmall,
               ),
+            if (status != null && (source.id == 'hongguo' || status.count > 0))
+              Text(status.catalogSummary),
             const SizedBox(height: 12),
             Wrap(
               spacing: 10,
               runSpacing: 8,
               crossAxisAlignment: WrapCrossAlignment.center,
               children: [
+                OutlinedButton.icon(
+                  key: ValueKey('report-${source.id}'),
+                  onPressed: () => _openReport(source),
+                  icon: const Icon(Icons.qr_code_rounded),
+                  label: const Text('诊断报告 / 扫码'),
+                ),
                 FilledButton.icon(
                   key: ValueKey('update-${source.id}'),
                   onPressed: enabled ? () => _run(source, 'update') : null,
@@ -334,8 +360,14 @@ class _SourcesScreenState extends State<SourcesScreen> {
                     PopupMenuItem(
                       value: 'more',
                       enabled: status?.hasMore ?? true,
-                      child: const Text('继续加载一页'),
+                      child: Text(source.id == 'hongguo' ? '继续加载一批' : '继续加载一页'),
                     ),
+                    if (source.id == 'hongguo')
+                      const PopupMenuItem(
+                        key: ValueKey('rescan-hongguo'),
+                        value: 'rescan',
+                        child: Text('重新扫描目录'),
+                      ),
                     const PopupMenuItem(value: 'metadata', child: Text('补齐资料')),
                     if (source.id == 'huangdou')
                       PopupMenuItem(
@@ -354,14 +386,20 @@ class _SourcesScreenState extends State<SourcesScreen> {
             if (busy) ...[
               const SizedBox(height: 12),
               LinearProgressIndicator(
-                value: status != null && status.total > 0
+                value:
+                    status != null &&
+                        status.running &&
+                        !status.scanningCatalog &&
+                        status.total > 0
                     ? (status.completed / status.total).clamp(0, 1)
                     : null,
               ),
               const SizedBox(height: 8),
               Text(
-                '${status?.stage ?? '准备中'}${(status?.total ?? 0) > 0 ? ' · ${status!.completed}/${status.total}' : ''}',
+                '${status?.stage ?? '准备中'}${status?.running == true && status?.scanningCatalog == false && (status?.total ?? 0) > 0 ? ' · ${status!.completed}/${status.total}' : ''}',
               ),
+              if (status?.scanningCatalog == true)
+                _catalogScanProgress(status!),
             ] else if (status != null && status.stage.isNotEmpty) ...[
               const SizedBox(height: 12),
               Text(
@@ -486,6 +524,15 @@ class _SourcesScreenState extends State<SourcesScreen> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text('${step.name}：${step.message}'),
+                              if (step.state == 'failed')
+                                Text(
+                                  DiagnosticIssue.classify(
+                                    step.message,
+                                    code: step.code,
+                                    status: step.httpStatus,
+                                  ).advice,
+                                  style: Theme.of(context).textTheme.bodySmall,
+                                ),
                               if (step.host.isNotEmpty || step.httpStatus > 0)
                                 Text(
                                   '${step.host}${step.httpStatus > 0 ? ' · HTTP ${step.httpStatus}' : ''} · ${step.elapsedMs} ms',
@@ -505,6 +552,40 @@ class _SourcesScreenState extends State<SourcesScreen> {
           ],
         ),
       ),
+    );
+  }
+
+  Widget _catalogScanProgress(SourceStatus status) {
+    final scan = status.catalogScan!;
+    final seconds = status.startedAt == null
+        ? 0
+        : DateTime.now()
+              .difference(status.startedAt!)
+              .inSeconds
+              .clamp(0, 86400);
+    final elapsed =
+        '${seconds ~/ 60}:${(seconds % 60).toString().padLeft(2, '0')}';
+    return Column(
+      key: const ValueKey('catalog-progress-hongguo'),
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SizedBox(height: 6),
+        Text('本轮已读取 ${scan.pages} 页 · 本次新增 ${status.added} 部'),
+        Wrap(
+          spacing: 12,
+          runSpacing: 4,
+          children: [
+            for (final feed in scan.feeds)
+              Text(
+                '${feed.name} ${feed.pages} 页${feed.exhausted ? '（已结束）' : ''}',
+              ),
+          ],
+        ),
+        Text(
+          '已用时 $elapsed${status.deadlineAt == null ? '' : ' · 本次限时至 ${sourceTimestamp(status.deadlineAt)}'}',
+        ),
+        const Text('总页数未知，读完或达到本次时限后停止；可随时停止，下次继续。'),
+      ],
     );
   }
 }

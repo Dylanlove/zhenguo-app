@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import 'app_layout.dart';
 import 'app_bottom_navigation.dart';
 import 'app_notice.dart';
+import 'home_selection_bar.dart';
 import 'glass_panel.dart';
 import 'core_bridge.dart';
 import 'catalog_filters.dart';
@@ -15,8 +16,6 @@ import 'catalog_prefetch.dart';
 import 'catalog_sort.dart';
 import 'catalog_sort_sheet.dart';
 import 'catalog_view_cache.dart';
-import 'feeds_screen.dart';
-import 'recommendation_service.dart';
 import 'recommendations_screen.dart';
 import 'rankings_screen.dart';
 import 'detail_screen.dart';
@@ -53,7 +52,6 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   static const _recommendationCategory = 'app:recommendations';
   static const _tabDiscover = 0;
-  static const _tabFeed = 1;
   static const _tabFollow = 2;
   static const _tabLive = 3;
   static const _tabDownloads = 4;
@@ -172,7 +170,9 @@ class _HomeScreenState extends State<HomeScreen> {
     });
     if (!_showRecommendations &&
         _category.isNotEmpty &&
-        !_categories.any((entry) => entry.id == _category)) {
+        !_categories.any(
+          (entry) => entry.id == CatalogCategory.baseId(_category),
+        )) {
       _changeCategory('');
     }
   }
@@ -304,7 +304,7 @@ class _HomeScreenState extends State<HomeScreen> {
     if (velocity.abs() < 240) return;
     final categories = _displayCategories;
     final index = categories.indexWhere(
-      (entry) => entry.id == _displayCategory,
+      (entry) => entry.id == CatalogCategory.baseId(_displayCategory),
     );
     final next = index + (velocity < 0 ? 1 : -1);
     if (next >= 0 && next < categories.length) {
@@ -568,7 +568,6 @@ class _HomeScreenState extends State<HomeScreen> {
     )..addListener(_updateChanged);
     _updater.startWatching();
     widget.repository.catalogUpdates.addListener(_metadataChanged);
-    RecommendationService.current?.attach(widget.store);
     if (widget.store.sources.isNotEmpty) {
       _load(useCache: true);
       _loadCategories();
@@ -579,7 +578,6 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   void dispose() {
-    RecommendationService.current?.detach();
     _updater.removeListener(_updateChanged);
     _updater.dispose();
     _cacheRefreshTimer?.cancel();
@@ -1118,7 +1116,6 @@ class _HomeScreenState extends State<HomeScreen> {
         final desktop = constraints.maxWidth >= 840;
         final navEntries = <(int, IconData, String)>[
           (_tabDiscover, Icons.home_rounded, '主页'),
-          (_tabFeed, Icons.play_circle_rounded, '在看'),
           (_tabFollow, Icons.bookmark_rounded, '追剧'),
           if (widget.store.canShowLive) (_tabLive, Icons.live_tv_rounded, '直播'),
           if (widget.store.canDownload)
@@ -1141,11 +1138,6 @@ class _HomeScreenState extends State<HomeScreen> {
             icon: Icon(Icons.home_outlined),
             selectedIcon: Icon(Icons.home_rounded),
             label: '主页',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.play_circle_outline_rounded),
-            selectedIcon: Icon(Icons.play_circle_rounded),
-            label: '在看',
           ),
           NavigationDestination(
             icon: Icon(Icons.bookmark_border_rounded),
@@ -1235,7 +1227,6 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                   )
                 : Text(switch (_tab) {
-                    _tabFeed => '在看',
                     _tabFollow => '追剧',
                     _tabLive => '直播',
                     _tabDownloads => '下载',
@@ -1257,13 +1248,6 @@ class _HomeScreenState extends State<HomeScreen> {
                   child: const Text('取消'),
                 ),
               ] else ...[
-                if (_tab == _tabFeed)
-                  IconButton(
-                    key: const ValueKey('feed-refresh'),
-                    tooltip: '刷新动态',
-                    onPressed: () => RecommendationService.current?.refresh(),
-                    icon: const Icon(Icons.refresh_rounded),
-                  ),
                 if (_tab == _tabFollow)
                   IconButton(
                     key: const ValueKey('follow-lan-sync'),
@@ -1390,11 +1374,6 @@ class _HomeScreenState extends State<HomeScreen> {
                         label: Text('主页'),
                       ),
                       NavigationRailDestination(
-                        icon: Icon(Icons.play_circle_outline_rounded),
-                        selectedIcon: Icon(Icons.play_circle_rounded),
-                        label: Text('在看'),
-                      ),
-                      NavigationRailDestination(
                         icon: Icon(Icons.bookmark_border_rounded),
                         selectedIcon: Icon(Icons.bookmark_rounded),
                         label: Text('追剧'),
@@ -1435,15 +1414,6 @@ class _HomeScreenState extends State<HomeScreen> {
                                 : _catalog(
                                     selectionInBody: desktop || television,
                                   )
-                          : _tab == _tabFeed
-                          ? FeedsScreen(
-                              key: const ValueKey('feed-tab'),
-                              repository: widget.repository,
-                              store: widget.store,
-                              onExitLeft: television
-                                  ? () => _navKey.currentState?.focusCurrent()
-                                  : null,
-                            )
                           : _tab == _tabLive
                           ? LiveScreen(
                               key: const ValueKey('live-tab'),
@@ -1833,92 +1803,14 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _selectionBar({bool safeBottom = true, bool glass = false}) {
-    final theme = Theme.of(context);
-    final count = _selectedDramas.length;
-    final content = Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          final summary = Semantics(
-            liveRegion: true,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  count == 0 ? '点选要下载的短剧' : '已选 $count 部',
-                  style: theme.textTheme.titleSmall?.copyWith(
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  count == 0
-                      ? '最多 ${BatchDownloads.maxDramas} 部'
-                      : '下一步选择分集和画质',
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: theme.colorScheme.onSurfaceVariant,
-                  ),
-                ),
-              ],
-            ),
-          );
-          final next = FilledButton(
-            key: const ValueKey('download-selected-dramas'),
-            focusNode: _selectionFocus,
-            onPressed: count == 0 ? null : _downloadSelected,
-            style: FilledButton.styleFrom(
-              minimumSize: const Size(96, 48),
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-            ),
-            child: const Text('下一步'),
-          );
-          if (constraints.maxWidth < 320 ||
-              MediaQuery.textScalerOf(context).scale(14) > 21) {
-            return Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [summary, const SizedBox(height: 12), next],
-            );
-          }
-          return Row(
-            children: [
-              Expanded(child: summary),
-              const SizedBox(width: 16),
-              next,
-            ],
-          );
-        },
-      ),
-    );
-    if (glass) {
-      return SafeArea(
-        top: false,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(
-            GlassBottomNavigation.sideMargin,
-            0,
-            GlassBottomNavigation.sideMargin,
-            GlassBottomNavigation.bottomMargin,
-          ),
-          child: GlassPanel(child: content),
-        ),
+  Widget _selectionBar({bool safeBottom = true, bool glass = false}) =>
+      HomeSelectionBar(
+        count: _selectedDramas.length,
+        focusNode: _selectionFocus,
+        onNext: _downloadSelected,
+        safeBottom: safeBottom,
+        glass: glass,
       );
-    }
-    return Material(
-      color: theme.colorScheme.surface,
-      child: Container(
-        width: double.infinity,
-        decoration: BoxDecoration(
-          border: Border(
-            top: BorderSide(color: theme.colorScheme.outlineVariant),
-          ),
-        ),
-        child: SafeArea(top: false, bottom: safeBottom, child: content),
-      ),
-    );
-  }
 
   Widget _televisionGrid(
     List<Drama> items,

@@ -69,6 +69,28 @@ void main() {
     expect(store.sources.any((source) => updater.busy(source.id)), isFalse);
   });
 
+  test('completed rescan refreshes the visible catalog only once', () async {
+    final store = await create();
+    final repository = LibraryFeatureRepository();
+    repository.statuses['hongguo'] = SourceStatus.fromJson({
+      'source': 'hongguo',
+      'count': 4,
+      'operation': 'rescan',
+      'finishedAt': '2026-10-20T00:00:00Z',
+      'catalogScan': {'state': 'complete', 'feeds': []},
+    });
+    final changed = <String>[];
+    final updater = LibraryUpdater(
+      repository,
+      store,
+      onCatalogChanged: changed.add,
+    );
+    addTearDown(updater.dispose);
+    await updater.refresh();
+    await updater.refresh();
+    expect(changed, ['hongguo']);
+  });
+
   test(
     'update scope respects compiled sources and keeps other starts after a failure',
     () async {

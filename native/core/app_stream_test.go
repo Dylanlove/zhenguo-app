@@ -86,6 +86,9 @@ func TestNativeStreamServesRangedExtensionlessMedia(t *testing.T) {
 	if response.StatusCode != http.StatusPartialContent || !bytes.Equal(body, payload[1000:2000]) {
 		t.Fatalf("ranged extensionless media mismatch: status=%d bytes=%d", response.StatusCode, len(body))
 	}
+	if response.Header.Get("Content-Range") != "bytes 1000-1999/8192" || response.Header.Get("Accept-Ranges") != "bytes" || response.ContentLength != 1000 {
+		t.Fatalf("ranged extensionless media lost seek headers: %v", response.Header)
+	}
 }
 
 func TestNativeStreamRewritesExtensionlessPlaylist(t *testing.T) {

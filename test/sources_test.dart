@@ -63,6 +63,148 @@ class SourceFixtureRepository extends FixtureRepository {
 }
 
 void main() {
+  testWidgets('Hongguo scan shows live counts, pages and its actual deadline', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(320, 1000);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    SharedPreferences.setMockInitialValues({});
+    final store = LocalStore(await SharedPreferences.getInstance());
+    final repository = SourceFixtureRepository();
+    final started = DateTime.now().subtract(const Duration(seconds: 65));
+    final deadline = started.add(const Duration(minutes: 12));
+    SourceStatus scanning(int count, int added, List<int> pages) =>
+        SourceStatus.fromJson({
+          'source': 'hongguo',
+          'count': count,
+          'added': added,
+          'running': true,
+          'operation': 'update',
+          'stage': '扫描红果 App 目录 · 漫剧',
+          'startedAt': started.toIso8601String(),
+          'deadlineAt': deadline.toIso8601String(),
+          'completed': 99,
+          'total': 100,
+          'catalogScan': {
+            'state': 'scanning',
+            'feeds': [
+              for (var index = 0; index < 3; index++)
+                {
+                  'name': ['真人剧', '漫剧', 'AI剧'][index],
+                  'pages': pages[index],
+                  'exhausted': index == 2,
+                },
+            ],
+          },
+        });
+    repository.statuses['hongguo'] = scanning(628, 0, [10, 11, 5]);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: SourcesScreen(repository: repository, store: store),
+      ),
+    );
+    await tester.pump();
+    expect(find.text('628 部'), findsOneWidget);
+    expect(find.text('本轮已读取 26 页 · 本次新增 0 部'), findsOneWidget);
+    expect(find.text('AI剧 5 页（已结束）'), findsOneWidget);
+    expect(
+      find.textContaining('本次限时至 ${sourceTimestamp(deadline)}'),
+      findsOneWidget,
+    );
+    expect(find.textContaining('已用时 1:'), findsOneWidget);
+    expect(find.textContaining('总页数未知'), findsOneWidget);
+    expect(
+      tester
+          .widget<LinearProgressIndicator>(find.byType(LinearProgressIndicator))
+          .value,
+      isNull,
+    );
+    repository.statuses['hongguo'] = scanning(656, 28, [11, 12, 6]);
+    await tester.pump(const Duration(seconds: 2));
+    await tester.pump();
+    expect(find.text('656 部'), findsOneWidget);
+    expect(find.text('本轮已读取 29 页 · 本次新增 28 部'), findsOneWidget);
+    expect(find.text('漫剧 12 页'), findsOneWidget);
+    expect(find.text('停止'), findsOneWidget);
+    expect(repository.operations, isEmpty);
+    expect(tester.takeException(), isNull);
+    repository.statuses['hongguo'] = SourceStatus.fromJson({
+      'source': 'hongguo',
+      'count': 656,
+      'running': true,
+      'operation': 'update',
+      'stage': '补齐剧集资料',
+      'completed': 2,
+      'total': 8,
+      'catalogScan': {'state': 'scanning', 'feeds': []},
+    });
+    await tester.pump(const Duration(seconds: 2));
+    await tester.pump();
+    expect(
+      find.byKey(const ValueKey('catalog-progress-hongguo')),
+      findsNothing,
+    );
+    expect(find.text('补齐剧集资料 · 2/8'), findsOneWidget);
+    expect(
+      tester
+          .widget<LinearProgressIndicator>(find.byType(LinearProgressIndicator))
+          .value,
+      .25,
+    );
+    await tester.pumpWidget(const SizedBox.shrink());
+    store.dispose();
+  });
+
+  testWidgets(
+    'ended Hongguo catalog can explicitly rescan while more is disabled',
+    (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      final store = LocalStore(await SharedPreferences.getInstance());
+      final repository = SourceFixtureRepository();
+      repository.statuses['hongguo'] = SourceStatus.fromJson({
+        'source': 'hongguo',
+        'count': 2639,
+        'page': 3,
+        'hasMore': false,
+        'catalogScan': {'state': 'complete', 'feeds': []},
+      });
+      await tester.pumpWidget(
+        MaterialApp(
+          home: SourcesScreen(repository: repository, store: store),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('已收录 2639 部 · 本轮扫描结束，可重新扫描'), findsOneWidget);
+      final menu = find.byTooltip('红果更多操作');
+      await tester.ensureVisible(menu);
+      await tester.tap(menu);
+      await tester.pumpAndSettle();
+      final more = find.ancestor(
+        of: find.text('继续加载一批'),
+        matching: find.byType(PopupMenuItem<String>),
+      );
+      expect(tester.widget<PopupMenuItem<String>>(more).enabled, isFalse);
+      await tester.tap(find.byKey(const ValueKey('rescan-hongguo')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+      expect(repository.operations, ['hongguo:rescan']);
+      await tester.pumpWidget(const SizedBox.shrink());
+      store.dispose();
+    },
+  );
+
+  test('unsaved catalog progress does not claim it has been saved', () {
+    final status = SourceStatus.fromJson({
+      'source': 'hongguo',
+      'count': 3,
+      'storageError': '保存失败',
+      'catalogScan': {'state': 'interrupted', 'feeds': []},
+    });
+    expect(status.catalogSummary, contains('尚未保存'));
+    expect(status.catalogSummary, isNot(contains('进度已保存')));
+  });
+
   testWidgets('source list keeps bottom content above system navigation', (
     tester,
   ) async {
@@ -130,7 +272,14 @@ void main() {
     (tester) async {
       SharedPreferences.setMockInitialValues({
         'profiles': jsonEncode([
-          const LocalProfile(id: 'default', name: '管理员', admin: true).toJson(),
+          const LocalProfile(
+            id: 'default',
+            name: '管理员',
+            admin: true,
+            salt: '11111111111111111111111111111111',
+            pinHash:
+                'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+          ).toJson(),
           const LocalProfile(
             id: 'viewer',
             name: '只看红果',
@@ -141,6 +290,9 @@ void main() {
         'activeProfile': 'viewer',
       });
       final store = LocalStore(await SharedPreferences.getInstance());
+      expect(store.configurationError, isNull);
+      expect(store.locked, isFalse);
+      expect(store.profile.id, 'viewer');
       final repository = SourceFixtureRepository();
       await tester.pumpWidget(
         MaterialApp(

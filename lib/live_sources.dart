@@ -48,7 +48,7 @@ class LiveSource {
     LiveSource(
       id: 'ysp',
       name: '央视频',
-      description: 'YSP Live 9.4 · 64 路频道 · 高清 / 4K · 7 天回看',
+      description: 'YSP Live 9.5 · 64 路频道 · 高清 / 4K · 7 天回看',
       protocol: LiveProtocol.ysp,
     ),
     LiveSource(

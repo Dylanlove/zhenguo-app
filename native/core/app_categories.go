@@ -13,8 +13,9 @@ import (
 )
 
 type nativeCategory struct {
-	ID   string `json:"id"`
-	Name string `json:"name"`
+	ID      string                 `json:"id"`
+	Name    string                 `json:"name"`
+	Filters []nativeCategoryFilter `json:"filters,omitempty"`
 }
 
 var nativeAICategories = []nativeCategory{
@@ -63,6 +64,14 @@ func validNativeCategory(source, category string) bool {
 		return validYeguoCategory(category)
 	case sourceDSD:
 		return webProviderNumericID.MatchString(category)
+	case sourceIkanbot:
+		return validFilmCategory(ikanbotCategories, category)
+	case sourceA123:
+		return validFilmCategory(a123Categories, category)
+	case sourceXiaopingguo:
+		return providerCategoryValid(xiaopingguoCategories, category)
+	case sourceMiguoHoney:
+		return providerCategoryValid(miguoHoneyCategories, category)
 	}
 	if isDuanjuProviderSource(source) {
 		return validDuanjuCategory(source, category)
@@ -83,6 +92,14 @@ func (engine *nativeEngine) nativeCategories(ctx context.Context, source string,
 		return append(all, nativeAICategories...), nil
 	case sourceHuangdou:
 		return all, nil
+	case sourceIkanbot:
+		return append(all, ikanbotCategories...), nil
+	case sourceA123:
+		return append(all, a123Categories...), nil
+	case sourceXiaopingguo:
+		return append(all, xiaopingguoCategories...), nil
+	case sourceMiguoHoney:
+		return append(all, miguoHoneyCategories...), nil
 	}
 	engine.mu.Lock()
 	cached := append([]nativeCategory{}, engine.categoryOptions[source]...)

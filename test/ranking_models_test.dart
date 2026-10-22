@@ -26,20 +26,11 @@ const nativeBoardSources = <String, String>{
   'yaguo-rank': 'yaguo',
   'yaguo-theater': 'yaguo',
   'maoguo-recommend': 'maoguo',
-  'fanguo-urban': 'fanguo',
-  'fanguo-sweet': 'fanguo',
-  'fanguo-counter': 'fanguo',
-  'guanguo-catalog': 'guanguo',
   'heguo-sweet': 'heguo',
   'heguo-xianxia': 'heguo',
   'heguo-romance': 'heguo',
   'xingguo-recommend': 'xingguo',
   'huaguo-drama': 'huaguo',
-  'niuguo-drama': 'niuguo',
-  'niuguo-movie': 'niuguo',
-  'niuguo-tv': 'niuguo',
-  'niuguo-anime': 'niuguo',
-  'niuguo-variety': 'niuguo',
   'wuguo-urban': 'wuguo',
   'wuguo-counter': 'wuguo',
   'wuguo-travel': 'wuguo',
@@ -56,6 +47,15 @@ const nativeBoardSources = <String, String>{
 };
 
 void main() {
+  test('retired sources have no source entry or ranking route', () {
+    for (final id in ['fanguo', 'guanguo', 'niuguo']) {
+      expect(SourceSite.isKnown(id), isFalse);
+      expect(SourceSite.isAvailable(id), isFalse);
+      expect(SourceSite.knownValues.any((source) => source.id == id), isFalse);
+      expect(RankingBoard.sourceForID('$id-catalog'), isEmpty);
+    }
+  });
+
   test('every native ranking board resolves to its real source', () {
     final wrong = <String>[];
     for (final entry in nativeBoardSources.entries) {

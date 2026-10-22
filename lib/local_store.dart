@@ -277,7 +277,7 @@ class LocalStore extends ChangeNotifier {
     final value = _configurationError == null
         ? _string('interfaceStyle')
         : null;
-    return {'standard', 'glass'}.contains(value) ? value! : 'standard';
+    return {'standard', 'glass'}.contains(value) ? value! : 'glass';
   }
 
   String get exportDirectory {
@@ -1147,7 +1147,7 @@ class LocalStore extends ChangeNotifier {
       'themeMode': data['themeMode'] as String? ?? themeMode,
       'interfaceStyle': {'standard', 'glass'}.contains(data['interfaceStyle'])
           ? data['interfaceStyle'] as String
-          : 'standard',
+          : 'glass',
       'autoExport': data['autoExport'] == true,
       'greenMode': data['greenMode'] is bool ? data['greenMode'] as bool : true,
       'fullMode': data['fullMode'] == true,

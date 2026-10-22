@@ -132,7 +132,13 @@ class CatalogBrowser {
         final name = categoryName(category.name);
         final choice = choices.putIfAbsent(
           name,
-          () => _CatalogChoice(CatalogCategory('category:$name', name)),
+          () => _CatalogChoice(
+            CatalogCategory(
+              'category:$name',
+              name,
+              filters: group.sources.length == 1 ? category.filters : const [],
+            ),
+          ),
         );
         choice.requests[source.id] = category.id;
       }
@@ -156,9 +162,25 @@ class CatalogBrowser {
     for (final choice in _choices(group)) choice.category,
   ];
 
-  _CatalogChoice? _choice(SourceGroup group, String category) => _choices(
-    group,
-  ).where((choice) => choice.category.id == category).firstOrNull;
+  _CatalogChoice? _choice(SourceGroup group, String category) {
+    final choice = _choices(group)
+        .where(
+          (choice) => choice.category.id == CatalogCategory.baseId(category),
+        )
+        .firstOrNull;
+    if (choice == null || choice.category.filters.isEmpty) return choice;
+    final filtered = _CatalogChoice(choice.category);
+    final values = choice.category.filterValues(category);
+    for (final request in choice.requests.entries) {
+      final native = CatalogCategory(
+        request.value,
+        choice.category.name,
+        filters: choice.category.filters,
+      );
+      filtered.requests[request.key] = native.selection(values);
+    }
+    return filtered;
+  }
 
   Future<CatalogPage> load(
     SourceGroup group, {
@@ -206,7 +228,7 @@ class CatalogBrowser {
           if (index < row.length) items[row[index].id] = row[index];
         }
       }
-      if (choice != null) {
+      if (choice != null && choice.category.filters.isEmpty) {
         for (final source in group.sources) {
           for (final item in _library[source.id]?.values ?? const <Drama>[]) {
             if (choice.category.local ||

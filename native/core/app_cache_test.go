@@ -37,6 +37,67 @@ func syntheticNativeCover(t *testing.T) ([]byte, []byte) {
 	return plain, encrypted
 }
 
+func TestNativeCoverFilmHeadersCacheAndRedirect(t *testing.T) {
+	plain, _ := syntheticNativeCover(t)
+	for _, sample := range []struct {
+		name, source, host, referer string
+		redirect                    bool
+	}{
+		{"ikanbot-img3", sourceIkanbot, "img3.doubanio.com", "https://movie.douban.com/", false},
+		{"ikanbot-img9-redirect", sourceIkanbot, "img9.doubanio.com", "https://movie.douban.com/", true},
+		{"a123-img2", sourceA123, "img2.doubanio.com", "https://movie.douban.com/", false},
+		{"douban-domain", sourceIkanbot, "movie.douban.com", "https://movie.douban.com/", false},
+		{"uppercase-domain", sourceIkanbot, "IMG3.DOUBANIO.COM", "https://movie.douban.com/", false},
+		{"other-image-host", sourceIkanbot, "posters.example.test", ikanbotBaseURL + "/", false},
+		{"suffix-lookalike", sourceIkanbot, "doubanio.com.example.test", ikanbotBaseURL + "/", false},
+		{"prefix-lookalike", sourceIkanbot, "otherdoubanio.com", ikanbotBaseURL + "/", false},
+		{"existing-source", sourceHongguo, "img3.doubanio.com", "", false},
+	} {
+		t.Run(sample.name, func(t *testing.T) {
+			calls := 0
+			referer := sample.referer
+			d := sourceFixtureDownloader(t, func(request *http.Request) (*http.Response, error) {
+				calls++
+				if request.Header.Get("Referer") != referer || request.Header.Get("User-Agent") == "" || request.Header.Get("Sec-Fetch-Dest") != "image" {
+					t.Error("cover request lost its image host headers", request.Header)
+				}
+				if request.URL.RawQuery != "signature=a%2Fb" {
+					t.Error("cover request changed its signed query", request.URL.RawQuery)
+				}
+				if sample.redirect && calls == 1 {
+					response := sourceFixtureResponse(request, http.StatusFound, "")
+					response.Header.Set("Location", "https://img1.doubanio.com/redirected.png?signature=a%2Fb")
+					return response, nil
+				}
+				return sourceFixtureResponse(request, http.StatusOK, string(plain)), nil
+			})
+			if referer == "" {
+				referer = d.providerBaseURL(sample.source) + "/"
+			}
+			cache := newNativeCoverCache(t.TempDir(), d)
+			drama := nativeDrama{ID: providerDramaID(sample.source, "123456"), Source: sample.source,
+				Cover: "https://" + sample.host + "/poster.png?signature=a%2Fb"}
+			for range 2 {
+				path, err := cache.loadAddress(context.Background(), drama, false)
+				if err != nil {
+					t.Fatal(err)
+				}
+				data, err := os.ReadFile(path)
+				if err != nil || !bytes.Equal(data, plain) {
+					t.Fatal("synthetic cover was not cached correctly", err)
+				}
+			}
+			wanted := 1
+			if sample.redirect {
+				wanted = 2
+			}
+			if calls != wanted {
+				t.Fatal("cover cache repeated a completed request", calls, wanted)
+			}
+		})
+	}
+}
+
 func TestNativeCoverDecryptsAndPersistsAcrossRestart(t *testing.T) {
 	plain, encrypted := syntheticNativeCover(t)
 	var calls atomic.Int32

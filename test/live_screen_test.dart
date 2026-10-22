@@ -1,4 +1,5 @@
 import 'package:duanju_app/core_bridge.dart';
+import 'package:duanju_app/live_epg.dart';
 import 'package:duanju_app/live_models.dart';
 import 'package:duanju_app/live_repository.dart';
 import 'package:duanju_app/live_screen.dart';
@@ -11,7 +12,7 @@ import 'package:shared_preferences_platform_interface/shared_preferences_platfor
 
 /// 合成直播源：不联网，只验证界面与收藏交互。
 class _FakeRepository extends LiveRepository {
-  _FakeRepository();
+  _FakeRepository({super.epg});
 
   final List<String> sources = [];
   int channelCalls = 0;
@@ -44,7 +45,10 @@ class _FakeRepository extends LiveRepository {
           urls: const ['http://a.example/hunan.m3u8'],
           number: '001',
           group: platform.name,
-          source: 'xiuguo',
+          source: source.id,
+          token: 'hnws',
+          tvgId: '湖南卫视',
+          catchup: source.protocol == LiveProtocol.ysp,
         ),
       ];
     }
@@ -56,7 +60,10 @@ class _FakeRepository extends LiveRepository {
           urls: ['http://a.example/cctv${index + 1}.m3u8'],
           number: '00${index + 1}',
           group: platform.name,
-          source: 'xiuguo',
+          source: source.id,
+          token: 'cctv${index + 1}',
+          tvgId: 'CCTV${index + 1}',
+          catchup: source.protocol == LiveProtocol.ysp,
         ),
     ];
   }
@@ -64,6 +71,29 @@ class _FakeRepository extends LiveRepository {
   @override
   Future<LivePlayback> playback(LiveSource source, LiveChannel channel) async =>
       LivePlayback(url: channel.urls.first);
+}
+
+class _FakeEpg extends LiveEpgRepository {
+  @override
+  Future<LiveEpgSchedule> programmes(
+    LiveChannel channel,
+    DateTime date, {
+    bool force = false,
+  }) async {
+    final now = DateTime.now();
+    return LiveEpgSchedule(
+      items: [
+        LiveProgramme(
+          channelId: channel.tvgId,
+          title: '合成节目',
+          start: now.subtract(const Duration(hours: 2)),
+          end: now.subtract(const Duration(hours: 1)),
+        ),
+      ],
+      source: '合成节目单',
+      updated: now,
+    );
+  }
 }
 
 class _FailingRepository extends LiveRepository {
@@ -92,7 +122,7 @@ void main() {
     final store = LiveStore(await SharedPreferences.getInstance(), 'default')
       ..load();
     addTearDown(store.dispose);
-    final repository = _FakeRepository();
+    final repository = _FakeRepository(epg: _FakeEpg());
     addTearDown(repository.dispose);
     return (store, repository);
   }
@@ -134,15 +164,11 @@ void main() {
     );
   });
 
-  testWidgets('内置直播源合并为单一入口，站源面板收在频道卡上', (tester) async {
+  testWidgets('默认央视频，站源面板收在频道卡上', (tester) async {
     final (store, repository) = await create();
     await pump(tester, repository, store);
 
-    expect(
-      LiveSource.values.first.name,
-      '秀果',
-      reason: '两个面板是同一上游的镜像，已合并成一个直播源',
-    );
+    expect(LiveSource.values.first.name, '央视频', reason: '央视频优先，其他直播源继续在频道卡片切换');
     expect(repository.sources, [LiveSource.values.first.id]);
     expect(
       find.textContaining(LiveSource.values.first.name),
@@ -170,16 +196,22 @@ void main() {
     expect(find.text('央视IPV4'), findsOneWidget);
   });
 
-  testWidgets('绿色模式下直播整源隐藏并给出可操作空态', (tester) async {
+  testWidgets('绿色模式保留央视频并隐藏成人直播源', (tester) async {
     final (store, repository) = await create();
     await pump(tester, repository, store, greenMode: true);
 
     expect(
       find.byKey(const ValueKey('live-green-empty')),
-      findsOneWidget,
-      reason: '没有可见直播源时应给出空态，而不是在 .first 上抛异常',
+      findsNothing,
+      reason: '央视频在绿色模式下仍然可用',
     );
-    expect(repository.sources, isEmpty, reason: '绿色模式下不应发起任何取源请求');
+    expect(repository.sources, ['ysp']);
+    await tester.tap(find.byKey(const ValueKey('live-source-button')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('live-source-ysp')), findsOneWidget);
+    expect(find.byKey(const ValueKey('live-source-xiuguo')), findsNothing);
+    await tester.tap(find.byKey(const ValueKey('live-source-ysp')));
+    await tester.pumpAndSettle();
     await pump(tester, repository, store, greenMode: false);
     expect(find.byKey(const ValueKey('live-stage')), findsOneWidget);
 
@@ -200,7 +232,9 @@ void main() {
       LiveSource.spreadWith(adultOnly, greenMode: false).map((s) => s.id),
       contains('adult-fixture'),
     );
-    expect(LiveSource.visible(true), isEmpty, reason: '内置直播源是秀场面板，绿色模式下整体隐藏');
+    expect(LiveSource.visible(true).map((source) => source.id), [
+      'ysp',
+    ], reason: '绿色模式保留央视频，隐藏秀果');
     expect(
       LiveSource.visible(false).map((source) => source.name),
       contains('秀果'),
@@ -228,6 +262,26 @@ void main() {
       isFalse,
       reason: '关闭绿色模式后不再过滤分类',
     );
+  });
+
+  testWidgets('打开节目单保留播放器，返回后恢复频道面板', (tester) async {
+    final (store, repository) = await create();
+    await pump(tester, repository, store);
+    final stage = find.byKey(const ValueKey('live-stage'));
+    final original = tester.getRect(stage);
+    await tester.tap(find.byKey(const ValueKey('live-programme-button')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('live-programme-guide')), findsOneWidget);
+    expect(find.text('合成节目'), findsOneWidget);
+    expect(tester.getRect(stage), original);
+    await tester.tap(find.byTooltip('返回频道'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('live-source-button')), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('live-favourites-button')),
+      findsOneWidget,
+    );
+    expect(tester.getRect(stage), original);
   });
 
   testWidgets('分类栏只有收藏，没有最近入口', (tester) async {

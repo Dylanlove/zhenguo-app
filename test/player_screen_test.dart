@@ -73,6 +73,7 @@ void main() {
     Size? size,
     FakeViewPadding? padding,
     ThemeData? theme,
+    int quality = 0,
   }) async {
     SharedPreferences.setMockInitialValues({});
     if (size != null) {
@@ -84,6 +85,11 @@ void main() {
       tester.view.viewPadding = padding;
     }
     final store = LocalStore(await SharedPreferences.getInstance());
+    if (quality > 0) {
+      await store.setPlaybackPreferences(
+        store.playbackPreferences.copyWith(quality: quality),
+      );
+    }
     final detail = await repository.detail(FixtureRepository.free);
     await tester.pumpWidget(
       MaterialApp(
@@ -113,6 +119,46 @@ void main() {
     expect(player.disposed, isTrue);
     expect(tester.takeException(), isNull);
   }
+
+  testWidgets(
+    'decoded resolution overrides stored quality and updates the open panel',
+    (tester) async {
+      final repository = RouteRepository();
+      final player = ScriptedPlayer();
+      await mount(tester, repository, player, quality: 1080);
+      final qualityButton = find.byKey(const ValueKey('player-quality'));
+      expect(
+        find.descendant(of: qualityButton, matching: find.text('1080P')),
+        findsNothing,
+      );
+      player.videoSize(406, 720, displayWidth: 1080, displayHeight: 1920);
+      await settleOperations(tester);
+      expect(
+        find.descendant(of: qualityButton, matching: find.text('406×720')),
+        findsOneWidget,
+      );
+      await tester.tap(qualityButton);
+      await tester.pumpAndSettle();
+      expect(find.text('实际播放：406×720'), findsOneWidget);
+      expect(find.text('画质偏好：1080P'), findsOneWidget);
+      player.videoSize(1280, 720);
+      await settleOperations(tester);
+      expect(find.text('实际播放：1280×720'), findsOneWidget);
+      expect(find.text('实际播放：406×720'), findsNothing);
+      await tester.tap(find.byKey(const ValueKey('menu-quality-720')));
+      await settleOperations(tester);
+      expect(repository.requestedQualities.last, 720);
+      expect(find.text('实际分辨率待识别'), findsOneWidget);
+      expect(find.text('实际播放：1280×720'), findsNothing);
+      player.videoSize(852, 480);
+      await settleOperations(tester);
+      expect(find.text('实际播放：852×480'), findsOneWidget);
+      expect(find.text('画质偏好：720P'), findsOneWidget);
+      await tester.tap(find.byTooltip('关闭菜单'));
+      await tester.pumpAndSettle();
+      await unmount(tester, player);
+    },
+  );
 
   testWidgets(
     'duplicate errors switch once while keeping progress, rate and pause state',
@@ -157,11 +203,11 @@ void main() {
         await settleOperations(tester);
       }
       expect(repository.primaryCalls, 2);
-      expect(repository.fallbackCalls, 2);
+      expect(repository.fallbackCalls, 1);
       expect(find.text('暂时无法播放'), findsOneWidget);
       expect(repository.active, isEmpty);
       await tester.pump(const Duration(seconds: 25));
-      expect(repository.primaryCalls + repository.fallbackCalls, 4);
+      expect(repository.primaryCalls + repository.fallbackCalls, 3);
       repository.broken = false;
       await tester.tap(find.text('重试播放'));
       await settleOperations(tester);
@@ -171,6 +217,51 @@ void main() {
       expect(repository.active, isEmpty);
     },
   );
+
+  for (final exhausted in [false, true]) {
+    testWidgets(
+      'Hongguo ${exhausted ? 'exhausts every route before one refresh' : 'reaches a working route beyond four attempts'}',
+      (tester) async {
+        final repository = SequenceRouteRepository(
+          workingRoute: exhausted ? null : 6,
+        );
+        final player = ScriptedPlayer();
+        await mount(tester, repository, player);
+        for (var attempt = 0; attempt < 10; attempt++) {
+          await tester.pump(const Duration(seconds: 1));
+          await settleOperations(tester);
+        }
+        expect(repository.fallbackCalls, 6);
+        expect(repository.primaryCalls, exhausted ? 2 : 1);
+        expect(repository.openedRoutes, [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          if (exhausted) 0,
+        ]);
+        expect(repository.active, hasLength(exhausted ? 0 : 1));
+        if (exhausted) {
+          expect(find.text('暂时无法播放'), findsOneWidget);
+          await tester.pump(const Duration(seconds: 25));
+          expect(repository.primaryCalls, 2);
+          expect(repository.fallbackCalls, 6);
+          repository.workingRoute = 0;
+          await tester.tap(find.text('重试播放'));
+          await settleOperations(tester);
+          expect(repository.primaryCalls, 3);
+          expect(repository.active, hasLength(1));
+        }
+        expect(find.text('暂时无法播放'), findsNothing);
+        expect(player.opened.last.start, const Duration(seconds: 7));
+        await unmount(tester, player);
+        expect(repository.active, isEmpty);
+      },
+    );
+  }
 
   testWidgets(
     'switching episodes ignores a delayed fallback and frees both old plans',
@@ -222,9 +313,18 @@ void main() {
         find.byKey(const ValueKey('player-picture-in-picture')),
         findsOneWidget,
       );
-      expect(find.text('选集'), findsOneWidget);
-      expect(find.text('简介'), findsOneWidget);
-      expect(find.text('下载'), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('player-side-episodes')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('player-side-synopsis')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('player-side-download')),
+        findsOneWidget,
+      );
       await tester.tap(find.byKey(const ValueKey('player-picture-in-picture')));
       await tester.pump();
       await tester.pump();
@@ -236,9 +336,9 @@ void main() {
       expect(find.byKey(const ValueKey('player-speed')), findsNothing);
       expect(find.byKey(const ValueKey('player-quality')), findsNothing);
       expect(find.byKey(const ValueKey('player-progress')), findsNothing);
-      expect(find.text('选集'), findsNothing);
-      expect(find.text('简介'), findsNothing);
-      expect(find.text('下载'), findsNothing);
+      expect(find.byKey(const ValueKey('player-side-episodes')), findsNothing);
+      expect(find.byKey(const ValueKey('player-side-synopsis')), findsNothing);
+      expect(find.byKey(const ValueKey('player-side-download')), findsNothing);
       await unmount(tester, player);
     } finally {
       messenger.setMockMethodCallHandler(AppDevice.channel, null);

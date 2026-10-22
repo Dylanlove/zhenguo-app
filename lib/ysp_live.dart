@@ -67,6 +67,10 @@ class YspLiveClient {
   Future<void> stop() async {
     await repository.ysp('stop', const {});
   }
+
+  Future<void> release() async {
+    await repository.ysp('idle', const {});
+  }
 }
 
 String yspQualityLabel(String quality) => switch (quality) {

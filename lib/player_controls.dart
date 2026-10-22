@@ -5,6 +5,8 @@ import 'package:flutter/material.dart';
 import 'package:media_kit/media_kit.dart';
 
 import 'lan_controller.dart';
+import 'player_chrome.dart';
+import 'player_danmaku_icon.dart';
 import 'player_feedback.dart';
 import 'player_interactions.dart';
 import 'player_rotation_icon.dart';
@@ -82,8 +84,7 @@ class PlayerControls extends StatefulWidget {
     this.swipeEnabled = false,
     this.panelOpen = false,
     this.onSeek,
-    this.onDanmaku,
-    this.onRetryDanmaku,
+    this.onDanmakuMenu,
     this.onPush,
     this.onPictureInPicture,
     this.onRotate,
@@ -96,6 +97,9 @@ class PlayerControls extends StatefulWidget {
     this.showMiniProgress = true,
     this.enhancement,
     this.sideActions = const <PlayerSideAction>[],
+    this.subtitle,
+    this.episodeNumber,
+    this.episodeCount,
   });
 
   final Player player;
@@ -108,6 +112,9 @@ class PlayerControls extends StatefulWidget {
   final VoidCallback? onPrevious;
   final VoidCallback? onNext;
   final String title;
+  final String? subtitle;
+  final int? episodeNumber;
+  final int? episodeCount;
   final VoidCallback onTogglePlayback;
   final Future<void> Function() onEpisodes;
   final Future<void> Function() onSpeed;
@@ -133,8 +140,7 @@ class PlayerControls extends StatefulWidget {
   final bool swipeEnabled;
   final bool panelOpen;
   final Future<void> Function(Duration)? onSeek;
-  final Future<void> Function()? onDanmaku;
-  final Future<void> Function()? onRetryDanmaku;
+  final Future<void> Function(BuildContext)? onDanmakuMenu;
   final Future<void> Function()? onPush;
   final Future<void> Function()? onPictureInPicture;
   final VideoEnhancementController? enhancement;
@@ -361,6 +367,13 @@ class _PlayerControlsState extends State<PlayerControls> {
         widget.panelOpen;
   }
 
+  bool get _episodeChrome => widget.subtitle != null;
+
+  bool get _portraitLayout =>
+      _episodeChrome &&
+      widget.swipeEnabled &&
+      MediaQuery.orientationOf(context) == Orientation.portrait;
+
   @override
   Widget build(BuildContext context) {
     final state = widget.player.state;
@@ -368,6 +381,15 @@ class _PlayerControlsState extends State<PlayerControls> {
     final position = state.position.inMilliseconds / 1000;
     final buffered = state.buffer.inMilliseconds / 1000;
     final visible = _chromeVisible;
+    final episodeChrome = _episodeChrome;
+    final compactCenter =
+        episodeChrome &&
+        widget.swipeEnabled &&
+        !_portraitLayout &&
+        widget.onPictureInPicture == null &&
+        widget.onCatchup == null;
+    final centerBottomInset = compactCenter ? 96.0 : 126.0;
+    final safePadding = MediaQuery.paddingOf(context);
     return MouseRegion(
       onHover: (_) => _show(),
       cursor: visible ? SystemMouseCursors.basic : SystemMouseCursors.none,
@@ -418,39 +440,65 @@ class _PlayerControlsState extends State<PlayerControls> {
                   child: Stack(
                     fit: StackFit.expand,
                     children: [
-                      const IgnorePointer(
+                      IgnorePointer(
                         child: DecoratedBox(
                           decoration: BoxDecoration(
-                            gradient: LinearGradient(
-                              begin: Alignment.topCenter,
-                              end: Alignment.bottomCenter,
-                              colors: [
-                                Color(0xAA000000),
-                                Colors.transparent,
-                                Color(0xE6000000),
-                              ],
-                              stops: [0, .45, 1],
-                            ),
+                            gradient: episodeChrome
+                                ? playerChromeGradient(
+                                    height: constraints.maxHeight,
+                                    topInset: _topChromeInset(),
+                                    bottomInset: _bottomChromeInset(),
+                                  )
+                                : const LinearGradient(
+                                    begin: Alignment.topCenter,
+                                    end: Alignment.bottomCenter,
+                                    colors: [
+                                      Color(0xAA000000),
+                                      Colors.transparent,
+                                      Color(0xE6000000),
+                                    ],
+                                    stops: [0, .45, 1],
+                                  ),
                           ),
                         ),
                       ),
                       Padding(
                         padding: EdgeInsets.fromLTRB(
-                          8,
+                          episodeChrome ? safePadding.left + 8 : 8,
                           _topChromeInset(),
-                          8,
+                          episodeChrome ? safePadding.right + 8 : 8,
                           _bottomChromeInset(),
                         ),
                         child: Stack(
                           children: [
-                            if (widget.fullscreen || widget.swipeEnabled)
+                            if (widget.fullscreen ||
+                                widget.swipeEnabled ||
+                                episodeChrome)
                               _topBar(),
                             if (!state.buffering &&
                                 !widget.interactions.scrubbing &&
                                 widget.enabled &&
                                 constraints.maxHeight >=
-                                    (widget.swipeEnabled ? 168 : 220))
-                              _centerPlayback(state.playing, showSkip: true),
+                                    (episodeChrome
+                                        ? _topChromeInset() +
+                                              _bottomChromeInset() +
+                                              centerBottomInset +
+                                              122
+                                        : widget.swipeEnabled
+                                        ? 168
+                                        : 220))
+                              Padding(
+                                padding: episodeChrome
+                                    ? EdgeInsets.only(
+                                        top: 60,
+                                        bottom: centerBottomInset,
+                                      )
+                                    : EdgeInsets.zero,
+                                child: _centerPlayback(
+                                  state.playing,
+                                  showSkip: true,
+                                ),
+                              ),
                             if (widget.enabled) ...[
                               _sideDanmakuControl(),
                               _bottomControls(
@@ -503,6 +551,7 @@ class _PlayerControlsState extends State<PlayerControls> {
 
   Widget _topBar() {
     final compact = widget.swipeEnabled && !widget.fullscreen;
+    final episodeChrome = _episodeChrome;
     return Align(
       alignment: Alignment.topCenter,
       child: Padding(
@@ -515,22 +564,31 @@ class _PlayerControlsState extends State<PlayerControls> {
                   ? widget.onFullscreen
                   : widget.onBack,
               icon: Icon(
-                widget.fullscreen
+                widget.fullscreen || !widget.swipeEnabled
                     ? Icons.arrow_back_rounded
                     : Icons.arrow_back_ios_new_rounded,
               ),
             ),
-            if (!compact)
+            if (episodeChrome) const SizedBox(width: 16),
+            if (!compact || episodeChrome)
               Expanded(
-                child: Text(
-                  widget.title,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
+                child: episodeChrome
+                    ? PlayerChromeTitle(
+                        title: widget.title,
+                        subtitle: widget.subtitle!,
+                      )
+                    : Text(
+                        widget.title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
               )
             else
               const Spacer(),
-            if (compact || widget.onRotate != null)
+            if (episodeChrome) const SizedBox(width: 12),
+            if (compact ||
+                widget.onRotate != null ||
+                episodeChrome && !widget.fullscreen)
               _overlayIconButton(
                 tooltip: '旋转与全屏',
                 onPressed: () {
@@ -655,10 +713,14 @@ class _PlayerControlsState extends State<PlayerControls> {
         mainAxisSize: MainAxisSize.min,
         children: [
           if (mobile)
-            _mobileControlRow(fullscreen: fullscreen)
+            _mobileControlRow(
+              fullscreen: fullscreen,
+              compact: constraints.maxHeight < 320,
+            )
           else
             _desktopControlRow(
               fullscreen: fullscreen,
+              compact: constraints.maxHeight < 320,
               showEpisodes: showEpisodes,
               showSpeedQuality: showSpeedQuality,
               showPush: showPush,
@@ -686,12 +748,16 @@ class _PlayerControlsState extends State<PlayerControls> {
     if (widget.swipeEnabled) {
       return MediaQuery.paddingOf(context).top + 10;
     }
+    if (_episodeChrome) return MediaQuery.paddingOf(context).top + 16;
     return 0;
   }
 
   double _bottomChromeInset() {
     if (widget.fullscreen) {
       return (MediaQuery.viewPaddingOf(context).bottom + 24).clamp(64.0, 104.0);
+    }
+    if (_episodeChrome && !widget.swipeEnabled) {
+      return MediaQuery.viewPaddingOf(context).bottom + 16;
     }
     return 0;
   }
@@ -928,30 +994,28 @@ class _PlayerControlsState extends State<PlayerControls> {
     );
   }
 
-  Widget _danmakuTool() => _toolButton(
-    key: const ValueKey('player-danmaku-toggle'),
-    tooltip: widget.danmakuStatus.isEmpty
-        ? (widget.danmakuEnabled ? '关闭弹幕' : '打开弹幕')
-        : widget.danmakuStatus,
-    visualWidth: 36,
-    selected: widget.danmakuEnabled,
-    onPressed: widget.enabled
-        ? () => _panel(widget.onRetryDanmaku ?? widget.onDanmaku!)
-        : null,
-    child: widget.onRetryDanmaku != null
-        ? const Icon(Icons.refresh_rounded, size: 21)
-        : Text(
-            '弹',
-            style: TextStyle(
-              fontSize: 14,
-              height: 1,
-              fontWeight: FontWeight.w800,
-              color: widget.danmakuEnabled
-                  ? Theme.of(context).colorScheme.primary
-                  : Colors.white.withValues(alpha: .86),
-            ),
-          ),
-  );
+  Widget _danmakuTool() {
+    final status = widget.danmakuEnabled ? '已开启' : '已关闭';
+    return Builder(
+      builder: (buttonContext) => Semantics(
+        toggled: widget.danmakuEnabled,
+        child: IconButton(
+          key: const ValueKey('player-danmaku-menu'),
+          tooltip: widget.danmakuStatus.isEmpty
+              ? '弹幕设置 · $status'
+              : '弹幕设置 · $status · ${widget.danmakuStatus}',
+          constraints: const BoxConstraints.tightFor(width: 48, height: 48),
+          padding: EdgeInsets.zero,
+          color: Colors.white,
+          disabledColor: Colors.white38,
+          onPressed: widget.enabled && widget.onDanmakuMenu != null
+              ? () => _panel(() => widget.onDanmakuMenu!(buttonContext))
+              : null,
+          icon: PlayerDanmakuIcon(enabled: widget.danmakuEnabled),
+        ),
+      ),
+    );
+  }
 
   Widget _sleepTimerTool() => _toolIcon(
     key: const ValueKey('player-sleep-timer'),
@@ -969,8 +1033,11 @@ class _PlayerControlsState extends State<PlayerControls> {
     onPressed: widget.enabled ? () => _panel(widget.onCatchup!) : null,
   );
 
+  double get _qualityToolWidth => widget.qualityLabel.contains('×') ? 96 : 52;
+
   Widget _desktopControlRow({
     required bool fullscreen,
+    required bool compact,
     required bool showEpisodes,
     required bool showSpeedQuality,
     required bool showPush,
@@ -994,7 +1061,7 @@ class _PlayerControlsState extends State<PlayerControls> {
           tooltip: '清晰度',
           label: widget.qualityLabel,
           onPressed: widget.enabled ? () => _panel(widget.onQuality) : null,
-          width: 52,
+          width: _qualityToolWidth,
         ),
       ],
       if (showPush) _lanPushTool(const ValueKey('fullscreen-lan-push')),
@@ -1037,11 +1104,27 @@ class _PlayerControlsState extends State<PlayerControls> {
     ];
     return Padding(
       padding: const EdgeInsets.fromLTRB(8, 0, 8, 0),
-      child: _clusteredToolRow(tools),
+      child: _episodeToolRow(
+        tools,
+        compact: compact,
+        toolsWidth:
+            (showSpeedQuality ? 66 + _qualityToolWidth : 0) +
+            48.0 *
+                ((widget.onSleepTimer != null ? 1 : 0) +
+                    (widget.onCatchup != null ? 1 : 0) +
+                    (showPush && LanController.current != null ? 1 : 0) +
+                    (showEpisodes ? 1 : 0) +
+                    (showCompare && widget.enhancement?.canCompare == true
+                        ? 1
+                        : 0) +
+                    (showVolume ? 1 : 0) +
+                    (widget.onPictureInPicture != null ? 1 : 0) +
+                    1),
+      ),
     );
   }
 
-  Widget _mobileControlRow({required bool fullscreen}) {
+  Widget _mobileControlRow({required bool fullscreen, required bool compact}) {
     final tools = [
       if (widget.onSleepTimer != null) _sleepTimerTool(),
       if (widget.onCatchup != null) _catchupTool(),
@@ -1057,7 +1140,7 @@ class _PlayerControlsState extends State<PlayerControls> {
         tooltip: '清晰度',
         label: widget.qualityLabel,
         onPressed: widget.enabled ? () => _panel(widget.onQuality) : null,
-        width: 52,
+        width: _qualityToolWidth,
       ),
       if (widget.onPush != null)
         _lanPushTool(const ValueKey('fullscreen-lan-push')),
@@ -1080,9 +1163,86 @@ class _PlayerControlsState extends State<PlayerControls> {
     ];
     return Padding(
       padding: const EdgeInsets.fromLTRB(2, 0, 2, 0),
-      child: _clusteredToolRow(tools),
+      child: _episodeToolRow(
+        tools,
+        compact: compact,
+        toolsWidth:
+            66 +
+            _qualityToolWidth +
+            48.0 *
+                ((widget.onSleepTimer != null ? 1 : 0) +
+                    (widget.onCatchup != null ? 1 : 0) +
+                    (widget.onPush != null && LanController.current != null
+                        ? 1
+                        : 0) +
+                    (fullscreen ? 1 : 0) +
+                    (widget.onPictureInPicture != null ? 1 : 0)),
+      ),
     );
   }
+
+  Widget _episodeToolRow(
+    List<Widget> tools, {
+    required double toolsWidth,
+    required bool compact,
+  }) {
+    if (!_episodeChrome ||
+        widget.episodeNumber == null ||
+        widget.episodeCount == null) {
+      return _clusteredToolRow(tools);
+    }
+    if (compact) {
+      return Row(
+        children: [
+          SizedBox(width: 80, child: _episodeCounter()),
+          const SizedBox(width: 8),
+          Expanded(
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: _toolGroup(tools),
+            ),
+          ),
+        ],
+      );
+    }
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final counterWidth = constraints.maxWidth - toolsWidth - 8;
+        if (tools.length <= 5 && counterWidth >= 80) {
+          return Row(
+            children: [
+              SizedBox(width: counterWidth, child: _episodeCounter()),
+              const SizedBox(width: 8),
+              _toolGroup(tools),
+            ],
+          );
+        }
+        return Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: _episodeCounter(),
+            ),
+            if (toolsWidth > constraints.maxWidth)
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: _toolGroup(tools),
+              )
+            else
+              _clusteredToolRow(tools),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _episodeCounter() => PlayerEpisodeCounter(
+    key: const ValueKey('player-episode-counter'),
+    number: widget.episodeNumber!,
+    count: widget.episodeCount!,
+  );
 
   Future<void> _openVolume(double initialVolume) async {
     var volume = initialVolume.clamp(0.0, 100.0);

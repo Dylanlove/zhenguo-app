@@ -21,6 +21,8 @@ const hongguoAppUserAgent = "com.phoenix.read/73532 (Linux; U; Android 16; zh_CN
 
 type hongguoCatalogCursor struct {
 	Offset        int       `json:"offset"`
+	Pages         int       `json:"pages,omitempty"`
+	StopReason    string    `json:"stopReason,omitempty"`
 	SessionID     string    `json:"sessionId,omitempty"`
 	LastID        string    `json:"lastId,omitempty"`
 	PageSignature string    `json:"pageSignature,omitempty"`
@@ -30,10 +32,11 @@ type hongguoCatalogCursor struct {
 }
 
 type hongguoCatalogState struct {
-	Version   int                             `json:"version"`
-	DeviceID  string                          `json:"deviceId"`
-	InstallID string                          `json:"installId"`
-	Feeds     map[string]hongguoCatalogCursor `json:"feeds"`
+	Version       int                             `json:"version"`
+	DeviceID      string                          `json:"deviceId"`
+	InstallID     string                          `json:"installId"`
+	Feeds         map[string]hongguoCatalogCursor `json:"feeds"`
+	ScanStartedAt time.Time                       `json:"scanStartedAt,omitempty"`
 }
 
 type hongguoAppClient struct {
@@ -48,8 +51,6 @@ type hongguoAppClient struct {
 	searchSeasons  map[string]*hongguoSearchSeasonCursor
 	suggestions    map[string]hongguoSuggestionEntry
 	suggestPending map[string]*hongguoSuggestionCall
-	danmaku        map[string]hongguoDanmakuCacheEntry
-	danmakuPending map[string]*hongguoDanmakuCall
 }
 
 func (downloader *Downloader) hongguoClient() *hongguoAppClient {
@@ -88,8 +89,15 @@ func (downloader *Downloader) restoreHongguoCatalog(state *hongguoCatalogState) 
 		for _, genre := range hongguoAppGenres {
 			known = known || name == genre.key || name == "category:"+genre.key
 		}
-		if !known || !cursor.Initialized || cursor.Offset < 0 || cursor.Offset > 1_000_000 || len(cursor.SessionID) > 4096 || len(cursor.LastID) > 256 || len(cursor.PageSignature) > 64 {
+		if !known || !cursor.Initialized && (cursor.Offset != 0 || cursor.Exhausted) || cursor.Offset < 0 || cursor.Offset > 1_000_000 || cursor.Pages < 0 || cursor.Pages > 1_000_000 || len(cursor.SessionID) > 4096 || len(cursor.LastID) > 256 || len(cursor.PageSignature) > 64 {
 			delete(cloned.Feeds, name)
+			continue
+		}
+		switch cursor.StopReason {
+		case "", "end", "batch", "error", "canceled", "timeout":
+		default:
+			cursor.StopReason = ""
+			cloned.Feeds[name] = cursor
 		}
 	}
 	client := downloader.hongguoClient()
@@ -144,6 +152,15 @@ func (downloader *Downloader) hongguoAppRequest(ctx context.Context, method, pat
 	for key, values := range extra {
 		query[key] = append([]string(nil), values...)
 	}
+	catalog := path == hongguoAppCatalogPath
+	userAgent := hongguoAppUserAgent
+	if catalog {
+		userAgent = hongguoPlaybackUserAgent
+		for _, key := range []string{"version_code", "manifest_version_code", "update_version_code", "pv_player"} {
+			query.Set(key, "71332")
+		}
+		query.Set("version_name", "7.1.3.32")
+	}
 	var body []byte
 	var err error
 	if payload != nil {
@@ -172,32 +189,36 @@ func (downloader *Downloader) hongguoAppRequest(ctx context.Context, method, pat
 		if err != nil {
 			return nil, err
 		}
-		request.Header.Set("User-Agent", hongguoAppUserAgent)
+		request.Header.Set("User-Agent", userAgent)
 		request.Header.Set("Accept", "application/json")
 		request.Header.Set("X-XS-From-Web", "0")
 		request.Header.Set("Sdk-Version", "2")
-		comment, _ := ctx.Value(hongguoCommentKey{}).(bool)
-		var commentNonce hongguoCommentNonce
-		if comment {
-			commentNonce, err = newHongguoCommentNonce()
-			if err != nil {
-				return nil, errors.New("无法准备红果文字请求")
-			}
-			request.Header.Set("Comment-Source", "601")
-			request.Header.Set("Server-Channel", "1000")
-		}
 		if payload != nil {
 			request.Header.Set("Content-Type", "application/json; charset=utf-8")
+		}
+		var entropy hongguoPlaybackEntropy
+		if catalog {
+			entropy, err = newHongguoPlaybackEntropy()
+			if err != nil {
+				return nil, errors.New("红果 App 目录签名初始化失败")
+			}
+			request.Header.Del("X-XS-From-Web")
+			request.Header.Set("X-SS-From-Web", "0")
+			request.Header.Set("X-Tt-Request-Tag", "t=0;n=0")
+			request.Header.Set("Passport-Sdk-Version", "50561")
+			request.Header.Set("X-Vc-Bdturing-Sdk-Version", "3.7.2.cn")
 		}
 		response, err := downloader.doPreparedCatalogRequest(request, 20*time.Second, func(prepared *http.Request) {
 			now := time.Now()
 			query.Set("_rticket", strconv.FormatInt(now.UnixMilli(), 10))
-			prepared.URL.RawQuery = query.Encode()
-			if comment {
-				signHongguoCommentRequest(prepared, commentNonce, now)
-			} else {
-				signHongguoRequest(prepared, body, now)
+			if catalog {
+				query.Set("ts", strconv.FormatInt(now.Unix(), 10))
+				prepared.URL.RawQuery = strings.ReplaceAll(strings.ReplaceAll(query.Encode(), "+", "%20"), "%2A", "*")
+				signHongguoPlaybackRequest(prepared, body, deviceID, now, entropy)
+				return
 			}
+			prepared.URL.RawQuery = query.Encode()
+			signHongguoRequest(prepared, body, now)
 		})
 		if err != nil {
 			lastErr = err
@@ -220,8 +241,12 @@ func (downloader *Downloader) hongguoAppRequest(ctx context.Context, method, pat
 			}
 			continue
 		}
-		if len(content) == 0 || len(content) > providerMaxBodyBytes {
-			return nil, errors.New("红果 App 接口未返回有效数据")
+		if len(content) > providerMaxBodyBytes {
+			return nil, errors.New("红果 App 接口响应超过大小限制")
+		}
+		if len(bytes.TrimSpace(content)) == 0 {
+			lastErr = errors.New("红果 App 接口 HTTP 200 返回空内容")
+			continue
 		}
 		var result map[string]any
 		decoder := json.NewDecoder(bytes.NewReader(content))

@@ -10,15 +10,42 @@ class GlassPanel extends StatelessWidget {
     required this.child,
     this.borderRadius = const BorderRadius.all(Radius.circular(28)),
     this.sigma = 24,
-  });
+  }) : _dialog = false;
+
+  const GlassPanel.dialog({super.key, required this.child})
+    : borderRadius = const BorderRadius.all(Radius.circular(24)),
+      sigma = 28,
+      _dialog = true;
 
   final Widget child;
   final BorderRadius borderRadius;
   final double sigma;
+  final bool _dialog;
 
   @override
   Widget build(BuildContext context) {
-    final dark = Theme.of(context).brightness == Brightness.dark;
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+    final dark = theme.brightness == Brightness.dark;
+    final content = _dialog
+        ? Theme(
+            data: theme.copyWith(
+              cardTheme: theme.cardTheme.copyWith(
+                color: colors.surfaceContainerHigh.withValues(alpha: .3),
+                surfaceTintColor: Colors.transparent,
+              ),
+              inputDecorationTheme: theme.inputDecorationTheme.copyWith(
+                fillColor: colors.surfaceContainer.withValues(alpha: .3),
+              ),
+              chipTheme: theme.chipTheme.copyWith(
+                backgroundColor: colors.surfaceContainer.withValues(alpha: .25),
+                selectedColor: colors.primary.withValues(alpha: .22),
+                disabledColor: colors.surfaceContainer.withValues(alpha: .12),
+              ),
+            ),
+            child: child,
+          )
+        : child;
     return DecoratedBox(
       decoration: BoxDecoration(
         borderRadius: borderRadius,
@@ -45,7 +72,68 @@ class GlassPanel extends StatelessWidget {
                 width: 1,
               ),
             ),
-            child: child,
+            child: content,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class GlassAlertDialog extends StatelessWidget {
+  const GlassAlertDialog({
+    super.key,
+    required this.title,
+    required this.content,
+    required this.actions,
+  });
+
+  final Widget title;
+  final Widget content;
+  final List<Widget> actions;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Dialog(
+      elevation: 0,
+      backgroundColor: Colors.transparent,
+      surfaceTintColor: Colors.transparent,
+      child: GlassPanel.dialog(
+        child: IntrinsicWidth(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(24, 24, 24, 0),
+                child: Semantics(
+                  namesRoute: true,
+                  child: DefaultTextStyle(
+                    style: theme.textTheme.headlineSmall!,
+                    child: title,
+                  ),
+                ),
+              ),
+              Flexible(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(24, 20, 24, 24),
+                  child: DefaultTextStyle(
+                    style: theme.textTheme.bodyMedium!,
+                    child: content,
+                  ),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
+                child: OverflowBar(
+                  alignment: MainAxisAlignment.end,
+                  spacing: 8,
+                  overflowSpacing: 8,
+                  children: actions,
+                ),
+              ),
+            ],
           ),
         ),
       ),

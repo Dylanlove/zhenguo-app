@@ -203,50 +203,19 @@ func (d *Downloader) resolveHongguoMedia(ctx context.Context, task Task) (provid
 	if !hongguoNumericID.MatchString(videoID) || !hongguoNumericID.MatchString(seriesID) {
 		return providerMedia{}, fmt.Errorf("红果章节 ID 无效，请重新获取章节")
 	}
-	media, nativeErr := d.resolveHongguoAppMedia(ctx, videoID)
-	if nativeErr == nil {
-		return media, nil
+	media, err := d.resolveHongguoAppMedia(ctx, videoID)
+	if err != nil {
+		return providerMedia{}, fmt.Errorf("红果高清接口取流失败：%w", err)
 	}
-	if err := ctx.Err(); err != nil {
-		return providerMedia{}, err
-	}
-	media, pageErr := d.resolveHongguoWebMedia(ctx, seriesID, videoID)
-	if pageErr == nil {
-		return media, nil
-	}
-	if err := ctx.Err(); err != nil {
-		return providerMedia{}, err
-	}
-	media, apiErr := d.resolveHongguoPlaybackAPI(ctx, seriesID, videoID)
-	if apiErr == nil {
-		return media, nil
-	}
-	return providerMedia{}, fmt.Errorf("红果 App 取流失败：%v；网页取流失败：%v；备用取流失败：%w", publicError(nativeErr), publicError(pageErr), apiErr)
+	return d.prepareHongguoMedia(ctx, media)
 }
 
-func (d *Downloader) resolveHongguoWebMedia(ctx context.Context, seriesID, videoID string) (providerMedia, error) {
-	pageURL := hongguoBaseURL + "/player/" + url.PathEscape(seriesID) + "/" + url.PathEscape(videoID)
-	body, err := d.fetchProviderText(ctx, pageURL, hongguoBaseURL+"/")
-	if err != nil {
-		return providerMedia{}, err
+func (d *Downloader) prepareHongguoMedia(ctx context.Context, media providerMedia) (providerMedia, error) {
+	address, err := url.Parse(media.URL)
+	if err != nil || !strings.HasSuffix(strings.ToLower(address.Path), ".m3u8") {
+		return media, err
 	}
-	page := routerLoaderMap(parseRouterData(body), "player_", "player_page")
-	if mapString(page, "vid") != videoID || mapString(page, "series_id") != seriesID {
-		return providerMedia{}, fmt.Errorf("红果未返回所请求的剧集，可能仅允许网页试看；请在站点确认该集的访问权限")
-	}
-	info, _ := page["video_player_info"].(map[string]any)
-	addresses := hongguoMediaAddresses(info)
-	if len(addresses) == 0 {
-		return providerMedia{}, fmt.Errorf("红果该集未提供公开播放地址，可能需要登录或 App 授权；不会将试看集冒充该集下载")
-	}
-	duration, _ := strconv.ParseFloat(mapString(info, "duration"), 64)
-	media := providerMedia{URL: addresses[0], Referer: d.providerBaseURL(sourceHongguo) + "/", Duration: time.Duration(duration * float64(time.Second))}
-	for _, address := range addresses {
-		variant := media
-		variant.URL, variant.Variants = address, nil
-		media.Variants = append(media.Variants, variant)
-	}
-	return media, nil
+	return d.fetchMediaPlaylistForMedia(ctx, media)
 }
 
 func hongguoDramaFromAny(v any, category string) Drama {

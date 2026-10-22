@@ -13,6 +13,7 @@ import 'background_downloads.dart';
 import 'local_store.dart';
 import 'playback_preferences.dart';
 import 'playback_settings_screen.dart';
+import 'danmaku_settings.dart';
 import 'profiles_screen.dart';
 import 'remote_widgets.dart';
 import 'sources_screen.dart';
@@ -157,6 +158,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
         () => widget.store.setInterfaceStyle(selected),
       );
     }
+  }
+
+  Future<void> _showDanmakuSettings() async {
+    await showDialog<void>(
+      context: context,
+      builder: (_) => DanmakuSettingsPanel(
+        store: widget.store,
+        television: AppLayout.isTelevision(context),
+      ),
+    );
   }
 
   Future<void> _backup(bool restore) async {
@@ -404,6 +415,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
         ),
       ),
+    (
+      id: 'danmaku-preferences',
+      icon: Icons.subtitles_outlined,
+      title: '弹幕设置',
+      subtitle: danmakuSettingsSummary(widget.store),
+      onPressed: widget.store.locked ? null : _showDanmakuSettings,
+    ),
     if (widget.store.canDownload)
       (
         id: 'download-preferences',
@@ -639,6 +657,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           ),
                         ),
                       ),
+                    ListTile(
+                      key: const ValueKey('danmaku-settings-entry'),
+                      leading: const Icon(Icons.subtitles_outlined),
+                      title: const Text('弹幕设置'),
+                      subtitle: Text(
+                        danmakuSettingsSummary(widget.store),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      trailing: const Icon(Icons.chevron_right_rounded),
+                      onTap: widget.store.locked ? null : _showDanmakuSettings,
+                    ),
                     if (widget.store.canDownload)
                       ListTile(
                         leading: const Icon(Icons.download_outlined),

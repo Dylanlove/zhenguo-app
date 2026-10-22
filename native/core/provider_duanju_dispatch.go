@@ -77,16 +77,12 @@ func (d *Downloader) fetchDuanjuCatalogPage(ctx context.Context, source string, 
 		return d.fetchYaguoCatalogPage(ctx, page, category)
 	case sourceMaoguo:
 		return d.fetchMaoguoCatalogPage(ctx, page, category)
-	case sourceFanguo:
-		return d.fetchFanguoCatalogPage(ctx, page, category)
-	case sourceGuanguo:
-		return d.fetchGuanguoCatalogPage(ctx, page, category)
+
 	case sourceHeguo:
 		return d.fetchHeguoCatalogPage(ctx, page, category)
 	case sourceXingguo:
 		return d.fetchXingguoCatalogPage(ctx, page, category)
-	case sourceNiuguo:
-		return d.fetchNiuguoCatalogPage(ctx, page, category)
+
 	case sourceHuaguo, sourceWuguo:
 		return d.fetchMaccmsCatalogPage(ctx, source, page, category)
 	case sourceChaoguo:
@@ -105,16 +101,12 @@ func (d *Downloader) fetchDuanjuDetail(ctx context.Context, source, sourceID str
 		return d.fetchYaguoDetail(ctx, sourceID)
 	case sourceMaoguo:
 		return d.fetchMaoguoDetail(ctx, sourceID)
-	case sourceFanguo:
-		return d.fetchFanguoDetail(ctx, sourceID)
-	case sourceGuanguo:
-		return d.fetchGuanguoDetail(ctx, sourceID)
+
 	case sourceHeguo:
 		return d.fetchHeguoDetail(ctx, sourceID)
 	case sourceXingguo:
 		return d.fetchXingguoDetail(ctx, sourceID)
-	case sourceNiuguo:
-		return d.fetchNiuguoDetail(ctx, sourceID)
+
 	case sourceHuaguo, sourceWuguo:
 		return d.fetchMaccmsDetail(ctx, source, sourceID)
 	case sourceChaoguo:
@@ -133,16 +125,12 @@ func (d *Downloader) searchDuanju(ctx context.Context, source, query string) ([]
 		return d.searchYaguo(ctx, query)
 	case sourceMaoguo:
 		return d.searchMaoguo(ctx, query)
-	case sourceFanguo:
-		return d.searchFanguo(ctx, query)
-	case sourceGuanguo:
-		return d.searchGuanguo(ctx, query)
+
 	case sourceHeguo:
 		return d.searchHeguo(ctx, query)
 	case sourceXingguo:
 		return d.searchXingguo(ctx, query)
-	case sourceNiuguo:
-		return d.searchNiuguo(ctx, query)
+
 	case sourceHuaguo, sourceWuguo:
 		return d.searchMaccms(ctx, source, query)
 	case sourceChaoguo:
@@ -190,8 +178,7 @@ func (d *Downloader) resolveDuanjuMedia(ctx context.Context, task Task) (provide
 	switch source {
 	case sourceHeguo:
 		return d.resolveHeguoMedia(ctx, task)
-	case sourceNiuguo:
-		return d.resolveNiuguoMedia(ctx, task)
+
 	}
 	base := d.duanjuBaseURL(source)
 	if base == "" {

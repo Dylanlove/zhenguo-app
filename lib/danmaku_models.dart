@@ -1,99 +1,146 @@
-const danmakuWindowMs = 30000;
+import 'package:characters/characters.dart';
+
+import 'models.dart';
+
 const danmakuLifetimeMs = 8000;
 const danmakuMaxDurationMs = 86400000;
+const danmakuMaxItems = 20000;
 
-bool _danmakuEmojiModifier(int rune) => rune == 0xfe0f || rune == 0xfe0e;
+String trimDanmakuText(String text, int limit) =>
+    text.characters.take(limit).toString();
 
-bool _danmakuEmojiJoiner(int rune) => rune == 0x200d;
-
-String trimDanmakuText(String text, int limit) {
-  final runes = text.runes.toList();
-  if (runes.length <= limit) return text;
-  var cut = limit;
-  while (cut > 0) {
-    var retreat = false;
-    if (cut < runes.length && _danmakuEmojiModifier(runes[cut])) {
-      cut--;
-      retreat = true;
-    }
-    if (cut > 0 && _danmakuEmojiJoiner(runes[cut - 1])) {
-      cut--;
-      retreat = true;
-    }
-    if (!retreat) break;
-  }
-  return String.fromCharCodes(runes.take(cut));
-}
+enum DanmakuMode { scroll, top, bottom }
 
 class DanmakuItem {
   const DanmakuItem({
     required this.id,
     required this.text,
     required this.timeMs,
+    this.color = 0xffffff,
+    this.mode = DanmakuMode.scroll,
   });
   final String id;
   final String text;
   final int timeMs;
+  final int color;
+  final DanmakuMode mode;
 }
 
-class DanmakuPage {
-  const DanmakuPage({
-    required this.episodeId,
-    required this.startMs,
-    required this.nextMs,
-    required this.items,
-  });
-  final String episodeId;
-  final int startMs;
-  final int nextMs;
-  final List<DanmakuItem> items;
+int? danmakuNumber(String text) {
+  final direct = int.tryParse(text);
+  if (direct != null) return direct;
+  const digits = {
+    '零': 0,
+    '一': 1,
+    '二': 2,
+    '两': 2,
+    '三': 3,
+    '四': 4,
+    '五': 5,
+    '六': 6,
+    '七': 7,
+    '八': 8,
+    '九': 9,
+  };
+  var total = 0, digit = 0;
+  for (final char in text.characters) {
+    if (digits.containsKey(char)) {
+      digit = digits[char]!;
+    } else if (char == '十' || char == '百') {
+      total += (digit == 0 ? 1 : digit) * (char == '十' ? 10 : 100);
+      digit = 0;
+    } else {
+      return null;
+    }
+  }
+  return text.isEmpty ? null : total + digit;
+}
 
-  factory DanmakuPage.fromJson(
-    Map<String, dynamic> json, {
-    required String episodeId,
-    required int startMs,
-    required int durationMs,
-  }) {
-    final next = json['nextMs'];
-    final rows = json['items'];
-    if (json['episodeId'] != episodeId ||
-        json['startMs'] != startMs ||
-        next is! int ||
-        next <= startMs ||
-        next > durationMs ||
-        rows is! List) {
-      throw const FormatException('弹幕分集或时间范围不符');
+class DanmakuSubject {
+  const DanmakuSubject({
+    required this.key,
+    required this.title,
+    required this.episode,
+    this.season = 1,
+  });
+  final String key;
+  final String title;
+  final int season;
+  final int episode;
+  String get fileName =>
+      '$title S${season.toString().padLeft(2, '0')}E${episode.toString().padLeft(2, '0')}.mp4';
+
+  static DanmakuSubject? fromEpisode(Drama drama, Episode episode) {
+    if (drama.title.trim().isEmpty || episode.number <= 0) return null;
+    final pattern = RegExp(
+      r'第\s*([\d零一二三四五六七八九十百两]+)\s*季|\bS(\d{1,3})(?:E\d+)?\b',
+      caseSensitive: false,
+    );
+    final match = pattern.firstMatch(drama.title);
+    final season = intValue(
+      episode.raw['seasonNumber'] ?? episode.raw['season'],
+    );
+    final parsed = match == null
+        ? 1
+        : danmakuNumber(match.group(1) ?? match.group(2)!);
+    final title = drama.title.replaceAll(pattern, '').trim();
+    final number = season > 0 ? season : parsed ?? 1;
+    return DanmakuSubject(
+      key: '${drama.id}|$number|${episode.number}',
+      title: title.isEmpty ? drama.title.trim() : title,
+      season: number,
+      episode: episode.number,
+    );
+  }
+}
+
+class DanmakuAnime {
+  const DanmakuAnime({
+    required this.id,
+    required this.title,
+    this.description = '',
+  });
+  final String id;
+  final String title;
+  final String description;
+}
+
+class DanmakuMatch {
+  const DanmakuMatch({
+    required this.sourceId,
+    required this.episodeId,
+    required this.animeTitle,
+    required this.episodeTitle,
+    this.animeId = '',
+  });
+  final String sourceId;
+  final String episodeId;
+  final String animeId;
+  final String animeTitle;
+  final String episodeTitle;
+  String get label => '$animeTitle · $episodeTitle';
+  Map<String, dynamic> toJson() => {
+    'sourceId': sourceId,
+    'episodeId': episodeId,
+    'animeId': animeId,
+    'animeTitle': animeTitle,
+    'episodeTitle': episodeTitle,
+  };
+  factory DanmakuMatch.fromJson(Map<String, dynamic> json) {
+    final source = json['sourceId'], episode = json['episodeId'];
+    if (source is! String ||
+        source.isEmpty ||
+        episode is! String ||
+        episode.isEmpty ||
+        episode.length > 2048) {
+      throw const FormatException('弹幕匹配记录无效');
     }
-    final items = <DanmakuItem>[];
-    final seen = <String>{};
-    for (final row in rows.take(90)) {
-      if (row is! Map) continue;
-      final id = row['id'], text = row['text'], time = row['timeMs'];
-      if (id is! String ||
-          id.isEmpty ||
-          id.length > 120 ||
-          text is! String ||
-          time is! int ||
-          time < startMs ||
-          time >= next ||
-          seen.contains(id)) {
-        continue;
-      }
-      final cleaned = text
-          .replaceAll(RegExp(r'[\x00-\x1f\x7f-\x9f\u2028\u2029]'), ' ')
-          .trim();
-      if (cleaned.isEmpty) continue;
-      seen.add(id);
-      items.add(
-        DanmakuItem(id: id, text: trimDanmakuText(cleaned, 181), timeMs: time),
-      );
-    }
-    items.sort((a, b) => a.timeMs.compareTo(b.timeMs));
-    return DanmakuPage(
-      episodeId: episodeId,
-      startMs: startMs,
-      nextMs: next,
-      items: List.unmodifiable(items),
+    return DanmakuMatch(
+      sourceId: source,
+      episodeId: episode,
+      animeId: json['animeId'] as String? ?? '',
+      animeTitle: json['animeTitle'] as String? ?? '',
+      episodeTitle: json['episodeTitle'] as String? ?? '',
     );
   }
 }

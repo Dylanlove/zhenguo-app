@@ -1,6 +1,7 @@
 import 'package:duanju_app/local_store.dart';
 import 'package:duanju_app/models.dart';
 import 'package:duanju_app/player_screen.dart';
+import 'package:duanju_app/television_controls.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -89,6 +90,32 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
     await settle(tester);
   }
+
+  testWidgets(
+    'TV quality panel separates decoding from an unavailable preference',
+    (tester) async {
+      await tester.pumpWidget(
+        televisionHost(
+          child: TelevisionSettingsDialog(
+            speed: 1,
+            quality: 1080,
+            qualities: const [720, 480],
+            sourceQuality: 720,
+            actualResolution: '406×720',
+            favorite: false,
+            onFavorite: () {},
+          ),
+        ),
+      );
+      expect(find.text('实际播放：406×720'), findsOneWidget);
+      expect(find.text('源站档位：720P'), findsOneWidget);
+      expect(find.text('画质偏好：1080P'), findsOneWidget);
+      expect(find.text('已保存 1080P 偏好，本集暂无此画质。'), findsOneWidget);
+      expect(find.byKey(const ValueKey('tv-quality-1080')), findsNothing);
+      expect(find.byKey(const ValueKey('tv-quality-720')), findsOneWidget);
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
 
   testWidgets(
     'TV remote pauses, seeks when hidden, seeks on the timeline and returns from fullscreen',

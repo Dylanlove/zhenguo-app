@@ -14,12 +14,45 @@ type providerMedia struct {
 	credentials *providerMediaCredentials
 	URL         string
 	Referer     string
+	RouteName   string
+	Width       int
+	Height      int
 	Duration    time.Duration
 	Playlist    string
 	HLSKey      []byte
 	CENCKey     []byte
 	Quality     int
 	Variants    []providerMedia
+}
+
+func providerMediaHLSURL(raw string) bool {
+	address, err := url.Parse(raw)
+	if err != nil {
+		return false
+	}
+	if strings.HasSuffix(strings.ToLower(address.Path), ".m3u8") {
+		return true
+	}
+	query := address.Query()
+	for _, name := range []string{"format", "ext"} {
+		if strings.EqualFold(strings.TrimPrefix(query.Get(name), "."), "m3u8") {
+			return true
+		}
+	}
+	return false
+}
+
+func providerMediaDASHURL(raw string) bool {
+	address, err := url.Parse(raw)
+	if err != nil {
+		return false
+	}
+	if strings.HasSuffix(strings.ToLower(address.Path), ".mpd") {
+		return true
+	}
+	query := address.Query()
+	return strings.EqualFold(strings.TrimPrefix(query.Get("format"), "."), "mpd") ||
+		strings.EqualFold(strings.TrimPrefix(query.Get("ext"), "."), "mpd")
 }
 
 func (d *Downloader) providerBaseURL(source string) string {
@@ -43,6 +76,14 @@ func (d *Downloader) providerBaseURL(source string) string {
 		configured, fallback = d.cfg.YeguoURL, yeguoBaseURL
 	case sourceDSD:
 		configured, fallback = d.cfg.DSDURL, dsdBaseURL
+	case sourceIkanbot:
+		configured, fallback = d.cfg.IkanbotURL, ikanbotBaseURL
+	case sourceA123:
+		configured, fallback = d.cfg.A123URL, a123BaseURL
+	case sourceXiaopingguo:
+		configured, fallback = d.cfg.XiaopingguoURL, xiaopingguoBaseURL
+	case sourceMiguoHoney:
+		configured, fallback = d.cfg.MiguoHoneyURL, miguoHoneyBaseURL
 	default:
 		if spec, found := duanjuSourceSpecFor(source); found {
 			return d.duanjuBaseURL(spec.ID)
@@ -76,6 +117,14 @@ func providerSourceForURL(raw string) string {
 		return sourceYeguo
 	case host == "dsd.com.se" || host == "www.dsd.com.se":
 		return sourceDSD
+	case host == "ikanbot.com" || host == "www.ikanbot.com" || host == "www1.ikanbot.com":
+		return sourceIkanbot
+	case host == "a123tv.com" || host == "www.a123tv.com":
+		return sourceA123
+	case host == "122.228.193.211":
+		return sourceXiaopingguo
+	case host == "mitaoline.com" || host == "honeypeach.cc":
+		return sourceMiguoHoney
 	default:
 		return duanjuSourceForHost(host)
 	}
@@ -141,6 +190,18 @@ func (d *Downloader) resolveProviderMedia(ctx context.Context, task Task) (provi
 	}
 	if chapter.Source == sourceDSD {
 		return d.resolveDSDMedia(ctx, task)
+	}
+	if chapter.Source == sourceIkanbot {
+		return d.resolveIkanbotMedia(ctx, task)
+	}
+	if chapter.Source == sourceA123 {
+		return d.resolveA123Media(ctx, task)
+	}
+	if chapter.Source == sourceXiaopingguo {
+		return d.resolveXiaopingguoMedia(ctx, task)
+	}
+	if chapter.Source == sourceMiguoHoney {
+		return d.resolveMiguoHoneyMedia(ctx, task)
 	}
 	if isDuanjuProviderSource(chapter.Source) {
 		return d.resolveDuanjuMedia(ctx, task)
@@ -235,6 +296,9 @@ func (d *Downloader) resolveProviderMedia(ctx context.Context, task Task) (provi
 			return providerMedia{}, fmt.Errorf("站点未返回有效 M3U8，可能需要登录或链接已失效")
 		}
 		media = selected
+	}
+	if chapter.Source == sourceHuangguoAI || chapter.Source == sourceHuangguoVideo {
+		media = huangguoMediaQualities(media)
 	}
 	return media, nil
 }

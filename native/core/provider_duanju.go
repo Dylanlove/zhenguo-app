@@ -7,14 +7,13 @@ import (
 )
 
 const (
-	sourceYaguo     = "yaguo"
-	sourceMaoguo    = "maoguo"
-	sourceFanguo    = "fanguo"
-	sourceGuanguo   = "guanguo"
-	sourceHeguo     = "heguo"
-	sourceXingguo   = "xingguo"
-	sourceHuaguo    = "huaguo"
-	sourceNiuguo    = "niuguo"
+	sourceYaguo  = "yaguo"
+	sourceMaoguo = "maoguo"
+
+	sourceHeguo   = "heguo"
+	sourceXingguo = "xingguo"
+	sourceHuaguo  = "huaguo"
+
 	sourceWuguo     = "wuguo"
 	sourceChaoguo   = "chaoguo"
 	sourceMiguo     = "miguo"
@@ -39,18 +38,15 @@ const (
 )
 
 var (
-	yaguoBaseURL     = "https://app.whjzjx.cn"
-	yaguoLoginURL    = "https://u.shytkjgs.com/user/v1/account/login"
-	maoguoBaseURL    = "https://api-store.qmplaylet.com"
-	maoguoReadURL    = "https://api-read.qmplaylet.com"
-	fanguoBaseURL    = "https://xifan-api-cn.youlishipin.com"
-	guanguoBaseURL   = "https://api.drama.9ddm.com"
-	heguoBaseURL     = "https://www.kuaikaw.cn"
-	xingguoBaseURL   = "http://read.api.duodutek.com"
-	huaguoBaseURL    = "https://www.zywest263.com"
-	niuguoBaseURL    = "https://ccc.chaojichaojichanga.com:35620"
-	niuguoParseURL   = "http://ccs.jshh.gzbaoxian.com"
-	niuguoParseURL2  = "http://101.42.92.211:5560"
+	yaguoBaseURL  = "https://app.whjzjx.cn"
+	yaguoLoginURL = "https://u.shytkjgs.com/user/v1/account/login"
+	maoguoBaseURL = "https://api-store.qmplaylet.com"
+	maoguoReadURL = "https://api-read.qmplaylet.com"
+
+	heguoBaseURL   = "https://www.kuaikaw.cn"
+	xingguoBaseURL = "http://read.api.duodutek.com"
+	huaguoBaseURL  = "https://www.zywest263.com"
+
 	wuguoBaseURL     = "https://www.duanju55.com"
 	chaoguoBaseURL   = "https://www.shanekids.com"
 	miguoBaseURL     = "https://dmxq40.com"
@@ -91,12 +87,11 @@ type duanjuSourceSpec struct {
 var duanjuProviderCatalog = []duanjuSourceSpec{
 	{ID: sourceYaguo, Name: "芽果", Base: yaguoBaseURL, Kind: "api", Searcher: true, Paged: true, BrowseAll: true},
 	{ID: sourceMaoguo, Name: "猫果", Base: maoguoBaseURL, Kind: "api", Searcher: true, Paged: true},
-	{ID: sourceFanguo, Name: "饭果", Base: fanguoBaseURL, Kind: "api", Searcher: true, Paged: true},
-	{ID: sourceGuanguo, Name: "观果", Base: guanguoBaseURL, Kind: "api", Agent: "okhttp/5.1.0", Searcher: true, Paged: true},
+
 	{ID: sourceHeguo, Name: "河果", Base: heguoBaseURL, Kind: "next", Searcher: true, Paged: true},
 	{ID: sourceXingguo, Name: "星果", Base: xingguoBaseURL, Kind: "api", Searcher: true, Paged: true},
 	{ID: sourceHuaguo, Name: "花果", Base: huaguoBaseURL, Kind: "maccms", Searcher: true, Paged: true},
-	{ID: sourceNiuguo, Name: "牛果", Base: niuguoBaseURL, Kind: "api", Searcher: true, Paged: true},
+
 	{ID: sourceWuguo, Name: "伍果", Base: wuguoBaseURL, Kind: "maccms", Searcher: true, Paged: true},
 	{ID: sourceChaoguo, Name: "超果", Base: chaoguoBaseURL, Kind: "web", Searcher: true, Paged: true},
 	{ID: sourceMiguo, Name: "米果", Base: miguoBaseURL, Kind: "maccms", Searcher: true},
@@ -139,12 +134,11 @@ const (
 var duanjuSourceAliases = map[string]string{
 	"yaguo": "yaguo", "xingya": sourceYaguo, "星芽": sourceYaguo, "app.whjzjx.cn": sourceYaguo,
 	"maoguo": "maoguo", "qimao": sourceMaoguo, "七猫": sourceMaoguo, "api-store.qmplaylet.com": sourceMaoguo,
-	"fanguo": "fanguo", "xifan": sourceFanguo, "西饭": sourceFanguo, "xifan-api-cn.youlishipin.com": sourceFanguo,
-	"guanguo": "guanguo", "weiguan": sourceGuanguo, "围观": sourceGuanguo, "api.drama.9ddm.com": sourceGuanguo,
+
 	"heguo": "heguo", "hema": sourceHeguo, "河马": sourceHeguo, "www.kuaikaw.cn": sourceHeguo, "kuaikaw.cn": sourceHeguo,
 	"xingguo": "xingguo", "xingxing": sourceXingguo, "星星": sourceXingguo, "read.api.duodutek.com": sourceXingguo,
 	"huaguo": "huaguo", "huasheng": sourceHuaguo, "花生": sourceHuaguo, "www.zywest263.com": sourceHuaguo,
-	"niuguo": "niuguo", "niuniu": sourceNiuguo, "牛牛": sourceNiuguo,
+
 	"wuguo": "wuguo", "wuwu": sourceWuguo, "五五": sourceWuguo, "www.duanju55.com": sourceWuguo,
 	"chaoguo": "chaoguo", "chaoduanju": sourceChaoguo, "超短剧": sourceChaoguo, "超果": sourceChaoguo,
 	"shanekids": sourceChaoguo, "www.shanekids.com": sourceChaoguo, "shanekids.com": sourceChaoguo,
@@ -237,18 +231,14 @@ func duanjuSourceForHost(host string) string {
 		return sourceYaguo
 	case host == "api-store.qmplaylet.com" || host == "api-read.qmplaylet.com":
 		return sourceMaoguo
-	case host == "xifan-api-cn.youlishipin.com":
-		return sourceFanguo
-	case host == "api.drama.9ddm.com":
-		return sourceGuanguo
+
 	case host == "www.kuaikaw.cn" || host == "kuaikaw.cn":
 		return sourceHeguo
 	case host == "read.api.duodutek.com":
 		return sourceXingguo
 	case host == "www.zywest263.com" || host == "zywest263.com":
 		return sourceHuaguo
-	case host == "ccc.chaojichaojichanga.com":
-		return sourceNiuguo
+
 	case host == "www.duanju55.com" || host == "duanju55.com":
 		return sourceWuguo
 	case host == "www.shanekids.com" || host == "shanekids.com":
@@ -307,10 +297,9 @@ func validDuanjuCategory(source, category string) bool {
 			return true
 		}
 		return webProviderNumericID.MatchString(strings.SplitN(category, "-", 2)[0])
-	case sourceHeguo, sourceYaguo, sourceNiuguo:
+	case sourceHeguo, sourceYaguo:
 		return webProviderNumericID.MatchString(strings.SplitN(category, "-", 2)[0])
-	case sourceFanguo, sourceGuanguo:
-		return true
+
 	case sourceChaoguo:
 		return validChaoguoCategory(category)
 	default:
@@ -344,44 +333,7 @@ var duanjuStaticCategories = map[string][]duanjuCategory{
 	sourceMaoguo: {
 		{ID: "0", Name: "推荐"},
 	},
-	sourceFanguo: {
-		{ID: "都市", Name: "都市"},
-		{ID: "甜宠", Name: "甜宠"},
-		{ID: "逆袭", Name: "逆袭"},
-		{ID: "战神", Name: "战神"},
-		{ID: "古装", Name: "古装"},
-		{ID: "穿越", Name: "穿越"},
-		{ID: "萌宝", Name: "萌宝"},
-		{ID: "总裁", Name: "总裁"},
-		{ID: "重生", Name: "重生"},
-		{ID: "复仇", Name: "复仇"},
-		{ID: "豪门", Name: "豪门"},
-		{ID: "虐恋", Name: "虐恋"},
-		{ID: "年代", Name: "年代"},
-		{ID: "神医", Name: "神医"},
-		{ID: "玄幻", Name: "玄幻"},
-		{ID: "言情", Name: "言情"},
-		{ID: "家庭", Name: "家庭"},
-		{ID: "婚姻", Name: "婚姻"},
-		{ID: "异能", Name: "异能"},
-		{ID: "赘婿", Name: "赘婿"},
-		{ID: "王妃", Name: "王妃"},
-		{ID: "修仙", Name: "修仙"},
-		{ID: "武侠", Name: "武侠"},
-		{ID: "宫廷", Name: "宫廷"},
-		{ID: "江湖", Name: "江湖"},
-		{ID: "职场", Name: "职场"},
-		{ID: "青春", Name: "青春"},
-		{ID: "灵异", Name: "灵异"},
-		{ID: "兵王", Name: "兵王"},
-		{ID: "龙王", Name: "龙王"},
-		{ID: "弃女", Name: "弃女"},
-		{ID: "真假千金", Name: "真假千金"},
-		{ID: "追妻", Name: "追妻"},
-		{ID: "闪婚", Name: "闪婚"},
-		{ID: "离婚", Name: "离婚"},
-		{ID: "短剧", Name: "短剧"},
-	},
+
 	sourceXingguo: {
 		{ID: "1287", Name: "推荐一"},
 		{ID: "1288", Name: "推荐二"},
@@ -389,13 +341,7 @@ var duanjuStaticCategories = map[string][]duanjuCategory{
 		{ID: "1290", Name: "推荐四"},
 		{ID: "1291", Name: "推荐五"},
 	},
-	sourceNiuguo: {
-		{ID: "5", Name: "短剧"},
-		{ID: "1", Name: "电影"},
-		{ID: "2", Name: "电视剧"},
-		{ID: "4", Name: "动漫"},
-		{ID: "3", Name: "综艺"},
-	},
+
 	sourceHeguo: {
 		{ID: "462", Name: "甜宠"},
 		{ID: "1102", Name: "古装仙侠"},

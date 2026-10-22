@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 
 import 'models.dart';
 import 'episode_browser.dart';
+import 'hongguo_series.dart';
+import 'player_series.dart';
 import 'playback_preferences.dart';
 import 'video_enhancement.dart';
 import 'video_enhancement_settings.dart';
@@ -18,19 +20,29 @@ class PlayerMenu extends StatefulWidget {
     required this.currentIndex,
     required this.preferences,
     required this.qualities,
-    required this.actualQuality,
+    required this.sourceQuality,
     required this.local,
     required this.favorite,
     required this.mobile,
     required this.onEpisode,
     required this.onPreferences,
     required this.onFavorite,
+    this.actualResolution,
     this.showDanmaku = false,
     this.danmakuStatus = '',
-    this.onRetryDanmaku,
+    this.onDanmakuSettings,
     this.preloadStatus = '',
     this.enhancement,
     this.onCompareEnhancement,
+    this.routeIndex = 0,
+    this.routeCount = 0,
+    this.routeLabel,
+    this.onRoute,
+    this.seriesEntries = const [],
+    this.currentDramaId = '',
+    this.onSeason,
+    this.switchingSeason = false,
+    this.onDiagnostics,
   });
 
   final PlayerMenuSection section;
@@ -38,16 +50,26 @@ class PlayerMenu extends StatefulWidget {
   final int currentIndex;
   final PlaybackPreferences preferences;
   final List<int> qualities;
-  final int actualQuality;
+  final int sourceQuality;
+  final String? actualResolution;
   final bool local;
   final bool favorite;
   final bool mobile;
   final bool showDanmaku;
   final String danmakuStatus;
-  final VoidCallback? onRetryDanmaku;
+  final VoidCallback? onDanmakuSettings;
   final String preloadStatus;
   final VideoEnhancementController? enhancement;
   final VoidCallback? onCompareEnhancement;
+  final int routeIndex;
+  final int routeCount;
+  final String Function(int)? routeLabel;
+  final ValueChanged<int>? onRoute;
+  final List<HongguoSeriesEntry> seriesEntries;
+  final String currentDramaId;
+  final ValueChanged<Drama>? onSeason;
+  final bool switchingSeason;
+  final VoidCallback? onDiagnostics;
   final ValueChanged<int> onEpisode;
   final Future<void> Function(PlaybackPreferences) onPreferences;
   final Future<void> Function() onFavorite;
@@ -128,11 +150,23 @@ class _PlayerMenuState extends State<PlayerMenu> {
               ),
             Expanded(
               child: widget.section == PlayerMenuSection.episodes
-                  ? PlayerEpisodeGrid(
-                      episodes: widget.episodes,
-                      currentIndex: widget.currentIndex,
-                      keyPrefix: 'menu-episode',
-                      onSelected: widget.onEpisode,
+                  ? Column(
+                      children: [
+                        PlayerSeriesBar(
+                          entries: widget.seriesEntries,
+                          currentDramaId: widget.currentDramaId,
+                          onSelected: widget.onSeason,
+                          busy: widget.switchingSeason,
+                        ),
+                        Expanded(
+                          child: PlayerEpisodeGrid(
+                            episodes: widget.episodes,
+                            currentIndex: widget.currentIndex,
+                            keyPrefix: 'menu-episode',
+                            onSelected: widget.onEpisode,
+                          ),
+                        ),
+                      ],
                     )
                   : SingleChildScrollView(
                       padding: const EdgeInsets.fromLTRB(18, 4, 18, 20),
@@ -186,14 +220,44 @@ class _PlayerMenuState extends State<PlayerMenu> {
           const SizedBox(height: 20),
         ],
         if (all || widget.section == PlayerMenuSection.quality) ...[
+          if (widget.onRoute != null && widget.routeCount > 1) ...[
+            const Text('播放线路'),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                for (var route = 0; route < widget.routeCount; route++)
+                  ChoiceChip(
+                    key: ValueKey('menu-route-$route'),
+                    label: Text(
+                      widget.routeLabel?.call(route) ?? '线路 ${route + 1}',
+                    ),
+                    selected: route == widget.routeIndex,
+                    onSelected: _busy ? null : (_) => widget.onRoute!(route),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 20),
+          ],
           const Text('清晰度'),
           const SizedBox(height: 8),
           Text(
-            widget.local
-                ? '本集正在播放本地原画，画质偏好用于后续在线播放。'
-                : widget.actualQuality > 0
-                ? '当前播放 ${widget.actualQuality}P'
-                : '使用源站可用画质',
+            widget.actualResolution == null
+                ? '实际分辨率待识别'
+                : '实际播放：${widget.actualResolution}',
+            style: helperStyle,
+          ),
+          if (widget.local || widget.sourceQuality > 0)
+            Text(
+              widget.local
+                  ? '本集正在播放本地文件，画质偏好用于后续在线播放。'
+                  : '源站档位：${widget.sourceQuality}P',
+              style: helperStyle,
+            ),
+          const SizedBox(height: 8),
+          Text(
+            '画质偏好：${preferences.quality == 0 ? '自动（优先高清）' : '${preferences.quality}P'}',
             style: helperStyle,
           ),
           const SizedBox(height: 8),
@@ -220,7 +284,9 @@ class _PlayerMenuState extends State<PlayerMenu> {
             Padding(
               padding: const EdgeInsets.only(top: 8),
               child: Text(
-                '已保存 ${preferences.quality}P 偏好，本集暂无此画质。',
+                widget.qualities.any((quality) => quality > 0)
+                    ? '已保存 ${preferences.quality}P 偏好，本集暂无此画质。'
+                    : '已保存 ${preferences.quality}P 偏好，本集未提供可切换的清晰度档位。',
                 style: helperStyle,
               ),
             ),
@@ -238,28 +304,26 @@ class _PlayerMenuState extends State<PlayerMenu> {
             ),
             onCompare: widget.onCompareEnhancement ?? () {},
           ),
-        if (all && widget.showDanmaku) ...[
-          SwitchListTile.adaptive(
-            key: const ValueKey('player-danmaku-enabled'),
+        if (widget.onDiagnostics != null &&
+            (all || widget.section == PlayerMenuSection.quality))
+          ListTile(
+            key: const ValueKey('player-diagnostics'),
             contentPadding: EdgeInsets.zero,
-            title: const Text('弹幕'),
-            subtitle: Text(widget.danmakuStatus),
-            value: preferences.danmaku,
-            onChanged: _busy
-                ? null
-                : (value) => _run(
-                    () => widget.onPreferences(
-                      preferences.copyWith(danmaku: value),
-                    ),
-                  ),
+            leading: const Icon(Icons.troubleshoot_rounded),
+            title: const Text('播放诊断报告'),
+            subtitle: const Text('查看播放记录、复制报告或扫码获取摘要'),
+            onTap: widget.onDiagnostics,
           ),
-          if (widget.onRetryDanmaku != null)
-            TextButton.icon(
-              key: const ValueKey('player-danmaku-retry'),
-              onPressed: _busy ? null : widget.onRetryDanmaku,
-              icon: const Icon(Icons.refresh_rounded),
-              label: const Text('重试弹幕'),
-            ),
+        if (all && widget.showDanmaku) ...[
+          ListTile(
+            key: const ValueKey('player-menu-danmaku-settings'),
+            contentPadding: EdgeInsets.zero,
+            leading: const Icon(Icons.subtitles_outlined),
+            title: const Text('弹幕设置'),
+            subtitle: Text(widget.danmakuStatus),
+            trailing: const Icon(Icons.chevron_right_rounded),
+            onTap: _busy ? null : widget.onDanmakuSettings,
+          ),
           const SizedBox(height: 8),
         ],
         if (all) ...[

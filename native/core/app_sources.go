@@ -12,7 +12,8 @@ import (
 )
 
 type nativeSourceTask struct {
-	cancel context.CancelFunc
+	cancel   context.CancelFunc
+	deadline time.Time
 }
 
 type nativeSourceRecord struct {
@@ -51,9 +52,11 @@ type nativeSourceStatus struct {
 	Error        string              `json:"error,omitempty"`
 	StorageError string              `json:"storageError,omitempty"`
 	StartedAt    time.Time           `json:"startedAt"`
+	DeadlineAt   time.Time           `json:"deadlineAt"`
 	FinishedAt   time.Time           `json:"finishedAt"`
 	RetryAt      time.Time           `json:"retryAt"`
 	Health       *nativeSourceHealth `json:"health,omitempty"`
+	CatalogScan  *nativeCatalogScan  `json:"catalogScan,omitempty"`
 }
 
 func (engine *nativeEngine) lockSourceCatalog(ctx context.Context, source string) (func(), error) {
@@ -147,11 +150,19 @@ func (engine *nativeEngine) sourceStatusLocked(source string) nativeSourceStatus
 	if warning != "" && !record.Running && stage == "已完成" {
 		stage = "等待保存"
 	}
+	var scan *nativeCatalogScan
+	if source == sourceHongguo {
+		scan = engine.hongguoScanStatusLocked(record)
+	}
+	var deadline time.Time
+	if task := engine.sourceTasks[source]; record.Running && task != nil {
+		deadline = task.deadline
+	}
 	return nativeSourceStatus{Source: source, Count: len(engine.catalogs[source]), UnknownVIP: unknownVIP, Page: max(1, state.Page), HasMore: !found || state.HasMore,
 		UpdatedAt: state.UpdatedAt, Operation: record.Operation, Running: record.Running, Stage: stage,
 		Completed: record.Completed, Total: record.Total, Added: record.Added, Error: record.Error,
-		StorageError: warning,
-		StartedAt:    record.StartedAt, FinishedAt: record.FinishedAt, RetryAt: record.RetryAt, Health: record.Health}
+		StorageError: warning, CatalogScan: scan,
+		StartedAt: record.StartedAt, DeadlineAt: deadline, FinishedAt: record.FinishedAt, RetryAt: record.RetryAt, Health: record.Health}
 }
 
 func (engine *nativeEngine) changeSourceRecord(source string, change func(*nativeSourceRecord)) {
@@ -172,9 +183,12 @@ func (engine *nativeEngine) startSourceTask(source, operation string, drama nati
 		return nativeSourceStatus{}, errNativeBuildSource
 	}
 	switch operation {
-	case "update", "more", "metadata", "vipMetadata", "check", "checkCatalog", "retrySave":
+	case "update", "more", "metadata", "vipMetadata", "check", "checkCatalog", "retrySave", "rescan":
 	default:
 		return nativeSourceStatus{}, errors.New("无效的站源操作")
+	}
+	if operation == "rescan" && source != sourceHongguo {
+		return nativeSourceStatus{}, errors.New("当前站源不支持重新扫描目录")
 	}
 	if operation == "vipMetadata" && source != sourceHuangdou {
 		return nativeSourceStatus{}, errors.New("当前站源不需要补齐 VIP 资料")
@@ -203,7 +217,8 @@ func (engine *nativeEngine) startSourceTask(source, operation string, drama nati
 		return nativeSourceStatus{}, fmt.Errorf("站源暂时暂停请求，请在 %d 秒后重试", max(1, int(time.Until(previous.RetryAt).Seconds()+.999)))
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 12*time.Minute)
-	task := &nativeSourceTask{cancel: cancel}
+	deadline, _ := ctx.Deadline()
+	task := &nativeSourceTask{cancel: cancel, deadline: deadline}
 	engine.sourceTasks[source] = task
 	previous.Operation, previous.Running, previous.Stage = operation, true, "准备中"
 	previous.Completed, previous.Total, previous.Added = 0, 0, 0
@@ -243,6 +258,12 @@ func (engine *nativeEngine) runSourceTask(ctx context.Context, source, operation
 		record := engine.sourceRecords[source]
 		record.Running, record.FinishedAt = false, time.Now()
 		record.Stage = "已完成"
+		if source == sourceHongguo && (operation == "update" || operation == "more" || operation == "rescan") {
+			record.Stage = "本轮扫描结束"
+			if hongguoCatalogHasMore(engine.hongguoCatalog) {
+				record.Stage = "本批扫描完成，可继续"
+			}
+		}
 		if err != nil {
 			record.Stage, record.Error = "未完成", truncate(publicError(err).Error(), nativeSourceErrorRunes)
 			var persistence *nativePersistenceError
@@ -282,24 +303,30 @@ func (engine *nativeEngine) updateSource(ctx context.Context, source, operation 
 		after := len(engine.nativeCached(source).Items)
 		engine.changeSourceRecord(source, func(record *nativeSourceRecord) { record.Added = max(0, after-count) })
 	}()
-	if operation == "update" {
-		engine.changeSourceRecord(source, func(record *nativeSourceRecord) { record.Stage = "查找新剧" })
-		if err := engine.loadSourceCatalogCategories(ctx, source, 1, true); err != nil {
+	if source == sourceHongguo && (operation == "update" || operation == "more" || operation == "rescan") {
+		if err := engine.loadHongguoSourceCatalog(ctx, operation); err != nil {
 			return err
 		}
-	}
-	if operation == "more" || operation == "update" {
-		engine.changeSourceRecord(source, func(record *nativeSourceRecord) { record.Stage = "继续加载历史分页" })
-		limit := 1
+	} else {
 		if operation == "update" {
-			maxPages := engine.downloader.cfg.MaxPagesPerSort
-			if maxPages <= 0 {
-				maxPages = defaultConfig().MaxPagesPerSort
+			engine.changeSourceRecord(source, func(record *nativeSourceRecord) { record.Stage = "查找新剧" })
+			if err := engine.loadSourceCatalogCategories(ctx, source, 1, true); err != nil {
+				return err
 			}
-			limit = max(0, maxPages-1)
 		}
-		if err := engine.loadSourceCatalogCategories(ctx, source, limit, false); err != nil {
-			return err
+		if operation == "more" || operation == "update" {
+			engine.changeSourceRecord(source, func(record *nativeSourceRecord) { record.Stage = "继续加载历史分页" })
+			limit := 1
+			if operation == "update" {
+				maxPages := engine.downloader.cfg.MaxPagesPerSort
+				if maxPages <= 0 {
+					maxPages = defaultConfig().MaxPagesPerSort
+				}
+				limit = max(0, maxPages-1)
+			}
+			if err := engine.loadSourceCatalogCategories(ctx, source, limit, false); err != nil {
+				return err
+			}
 		}
 	}
 	if operation == "more" {
@@ -442,17 +469,21 @@ func (engine *nativeEngine) loadSourceCatalogCategory(ctx context.Context, sourc
 		return nil
 	}
 	key := nativeCatalogKey(source, category)
-	engine.mu.Lock()
-	state, found := engine.catalogStates[key]
-	engine.mu.Unlock()
-	tail := 1
-	if found && state.HasMore {
-		tail = max(1, state.Page+1)
-	}
 	if rescanHead {
 		if err := engine.loadSourceCatalogCategoryPage(ctx, source, category, 1); err != nil {
 			return err
 		}
+		pages--
+	}
+	engine.mu.Lock()
+	state, found := engine.catalogStates[key]
+	engine.mu.Unlock()
+	if found && !state.HasMore {
+		return nil
+	}
+	tail := 1
+	if found {
+		tail = max(1, state.Page+1)
 	}
 	for loaded := 0; loaded < pages; loaded++ {
 		page := tail + loaded

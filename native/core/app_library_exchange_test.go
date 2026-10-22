@@ -1,6 +1,7 @@
 package core
 
 import (
+	"encoding/json"
 	"testing"
 	"time"
 )
@@ -62,6 +63,7 @@ func TestNativeLibraryImportMergesCompletesAndKeepsLocalValues(t *testing.T) {
 		App: "juku", Kind: nativeLibraryExchangeKind, Version: nativeLibraryExchangeVersion,
 		Dramas: []nativeLibraryExchangeDrama{
 			{ID: "hongguo:7000000000000000001", Title: "红果样本", Description: "来自网页版的简介", Cover: "https://hongguo.example.test/b.jpg", Episodes: 30, Category: "古装仙侠", Heat: "覆盖热度", Views: "覆盖播放量", OnlineDate: "2026-09-09", ReleaseStatus: "finished", Tags: []string{"都市", "古装"}},
+			{ID: "hongguo:7000000000000000002", Cover: "https://hongguo.example.test/c.jpg"},
 			{ID: "hongguo:7000000000000000003", Title: "红果新样本", Description: "新条目", Episodes: 12, OnlineDate: "2026-09-01"},
 			{ID: "", Title: "缺少 ID"},
 			{ID: "not-a-provider-id", Title: "无法识别的 ID"},
@@ -95,6 +97,9 @@ func TestNativeLibraryImportMergesCompletesAndKeepsLocalValues(t *testing.T) {
 	}
 	if first.Cover != "https://hongguo.example.test/a.jpg" {
 		t.Fatal("existing cover was replaced", first.Cover)
+	}
+	if items[1].Cover != "https://hongguo.example.test/c.jpg" {
+		t.Fatal("missing cover was not filled during import", items[1].Cover)
 	}
 	if len(first.Tags) != 1 || first.Tags[0] != "都市" {
 		t.Fatal("local tags were replaced", first.Tags)
@@ -136,7 +141,11 @@ func TestNativeLibraryImportIsRepeatableAndPersists(t *testing.T) {
 
 func TestNativeLibraryImportRejectsForeignVersions(t *testing.T) {
 	directory := t.TempDir()
-	if response := NativeRequest(`{"action":"initialize","directory":"` + directory + `"}`); !containsText(response, `"ok":true`) {
+	initialize, err := json.Marshal(map[string]string{"action": "initialize", "directory": directory})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if response := NativeRequest(string(initialize)); !containsText(response, `"ok":true`) {
 		t.Fatal("engine did not start", response)
 	}
 	defer NativeRequest(`{"action":"release"}`)
