@@ -155,6 +155,7 @@ class EpisodeBrowser extends StatefulWidget {
     this.keyPrefix = 'episode',
     this.title = '选集',
     this.compact = false,
+    this.dense = false,
     this.onExitUp,
     this.onExitDown,
   });
@@ -165,6 +166,7 @@ class EpisodeBrowser extends StatefulWidget {
   final String keyPrefix;
   final String title;
   final bool compact;
+  final bool dense;
   final VoidCallback? onExitUp;
   final VoidCallback? onExitDown;
   @override
@@ -236,26 +238,62 @@ class _EpisodeBrowserState extends State<EpisodeBrowser> {
                     max(value, episode.number.toString().length),
               );
               final scale = MediaQuery.textScalerOf(context);
-              final columns =
-                  ((constraints.maxWidth - (widget.compact ? 8 : 36)) /
-                          max(
-                            widget.compact
-                                ? 64
-                                : television
-                                ? 100
-                                : 82,
-                            scale.scale(widget.compact ? 18 : 20) *
-                                    digits *
-                                    .65 +
-                                (widget.compact ? 28 : 40),
-                          ))
-                      .floor()
-                      .clamp(widget.compact ? 4 : 1, 12);
-              final extent = max(
-                widget.compact ? 46.0 : 56.0,
-                scale.scale(widget.compact ? 18 : 20) +
-                    (widget.compact ? 24 : 30),
-              );
+              final dense = widget.dense && !television;
+              final compact = widget.compact;
+              final double fontSize;
+              final double gap;
+              final double inset;
+              final double baseline;
+              final double textPad;
+              final int minColumns;
+              final int maxColumns;
+              final double minExtent;
+              final double extentPad;
+              final EdgeInsets padding;
+              if (dense) {
+                fontSize = 14;
+                gap = 6;
+                inset = 16;
+                baseline = 36;
+                textPad = 12;
+                minColumns = 4;
+                maxColumns = 8;
+                minExtent = 38;
+                extentPad = 18;
+                padding = const EdgeInsets.fromLTRB(8, 2, 8, 12);
+              } else if (compact) {
+                fontSize = 18;
+                gap = 6;
+                inset = 8;
+                baseline = 64;
+                textPad = 28;
+                minColumns = 4;
+                maxColumns = 12;
+                minExtent = 46;
+                extentPad = 24;
+                padding = const EdgeInsets.fromLTRB(4, 4, 4, 12);
+              } else {
+                fontSize = 20;
+                gap = 8;
+                inset = 36;
+                baseline = television ? 100 : 82;
+                textPad = 40;
+                minColumns = 1;
+                maxColumns = 12;
+                minExtent = 56;
+                extentPad = 30;
+                padding = const EdgeInsets.fromLTRB(18, 2, 18, 18);
+              }
+              final fitted =
+                  ((constraints.maxWidth - inset) /
+                          (max(
+                                baseline,
+                                scale.scale(fontSize) * digits * .65 + textPad,
+                              ) +
+                              gap))
+                      .floor();
+              final columns = fitted.clamp(minColumns, maxColumns);
+              final extent = max(minExtent, scale.scale(fontSize) + extentPad);
               final target = max(
                 0,
                 visible.indexWhere(
@@ -272,8 +310,8 @@ class _EpisodeBrowserState extends State<EpisodeBrowser> {
                     return;
                   }
                   _scroll.jumpTo(
-                    (18 +
-                            target ~/ columns * (extent + 8) -
+                    ((dense ? 2 : 18) +
+                            target ~/ columns * (extent + gap) -
                             constraints.maxHeight / 2 +
                             extent / 2)
                         .clamp(0.0, _scroll.position.maxScrollExtent),
@@ -292,10 +330,8 @@ class _EpisodeBrowserState extends State<EpisodeBrowser> {
                     .toList(),
                 columns: columns,
                 itemExtent: extent,
-                spacing: widget.compact ? 6 : 8,
-                padding: widget.compact
-                    ? const EdgeInsets.fromLTRB(4, 4, 4, 12)
-                    : const EdgeInsets.fromLTRB(18, 2, 18, 18),
+                spacing: gap,
+                padding: padding,
                 itemBuilder: (_, index, node, onFocus) {
                   final episode = visible[index];
                   return RemoteEpisodeButton(
@@ -303,6 +339,7 @@ class _EpisodeBrowserState extends State<EpisodeBrowser> {
                     number: episode.number,
                     vip: episode.vip,
                     compact: widget.compact,
+                    dense: dense,
                     current:
                         widget.selectedNumbers?.contains(episode.number) ??
                         episode.number == widget.currentNumber,

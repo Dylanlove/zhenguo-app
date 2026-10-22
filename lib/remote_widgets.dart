@@ -846,6 +846,7 @@ class RemoteEpisodeButton extends StatelessWidget {
     this.vip = false,
     this.current = false,
     this.compact = false,
+    this.dense = false,
     this.focusNode,
     this.onFocus,
   });
@@ -853,48 +854,78 @@ class RemoteEpisodeButton extends StatelessWidget {
   final bool vip;
   final bool current;
   final bool compact;
+  final bool dense;
   final VoidCallback onPressed;
   final FocusNode? focusNode;
   final VoidCallback? onFocus;
 
   @override
-  Widget build(BuildContext context) => RemoteTarget(
-    focusNode: focusNode,
-    onFocus: onFocus,
-    selected: current,
-    radius: compact ? 8 : 14,
-    padding: compact ? const EdgeInsets.all(2) : const EdgeInsets.all(4),
-    borderWidth: compact ? 1.2 : 2,
-    outlined: true,
-    onPressed: onPressed,
-    label: '第 $number 集${vip ? '，VIP 试看' : ''}',
-    child: Center(
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Flexible(
-            child: Text(
-              '$number',
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                fontSize: compact ? 14 : 20,
-                fontWeight: current ? FontWeight.w700 : FontWeight.w500,
-              ),
-            ),
-          ),
-          if (vip) ...[
-            SizedBox(width: compact ? 2 : 4),
-            Icon(
-              Icons.workspace_premium_rounded,
-              color: Theme.of(context).colorScheme.tertiary,
-              size: compact ? 15 : 18,
-            ),
-          ],
-        ],
+  Widget build(BuildContext context) {
+    final small = compact || dense;
+    final double radius;
+    final double borderWidth;
+    final double iconSize;
+    final double iconGap;
+    final EdgeInsets inset;
+    if (compact) {
+      radius = 8;
+      borderWidth = 1.2;
+      iconSize = 15;
+      iconGap = 2;
+      inset = const EdgeInsets.all(2);
+    } else if (dense) {
+      radius = 10;
+      borderWidth = 1.4;
+      iconSize = 13;
+      iconGap = 2;
+      inset = const EdgeInsets.all(2);
+    } else {
+      radius = 14;
+      borderWidth = 2;
+      iconSize = 18;
+      iconGap = 4;
+      inset = const EdgeInsets.all(4);
+    }
+    final text = Text(
+      '$number',
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+      style: TextStyle(
+        fontSize: small ? 14 : 20,
+        fontWeight: current ? FontWeight.w700 : FontWeight.w500,
       ),
-    ),
-  );
+    );
+    final content = Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (small) text else Flexible(child: text),
+        if (vip) ...[
+          SizedBox(width: iconGap),
+          Icon(
+            Icons.workspace_premium_rounded,
+            color: Theme.of(context).colorScheme.tertiary,
+            size: iconSize,
+          ),
+        ],
+      ],
+    );
+    return RemoteTarget(
+      focusNode: focusNode,
+      onFocus: onFocus,
+      selected: current,
+      radius: radius,
+      padding: inset,
+      borderWidth: borderWidth,
+      outlined: true,
+      onPressed: onPressed,
+      label: '第 $number 集${vip ? '，VIP 试看' : ''}',
+      child: Center(
+        child: small
+            ? FittedBox(fit: BoxFit.scaleDown, child: content)
+            : content,
+      ),
+    );
+  }
 }
 
 /// 电视模式下的选项列表对话框，全部选项都可用遥控器移动和确认。

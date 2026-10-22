@@ -211,7 +211,8 @@ void main() {
       final repository = RouteRepository()..broken = true;
       final player = ScriptedPlayer();
       await mount(tester, repository, player);
-      for (var attempt = 0; attempt < 5; attempt++) {
+      // 失败后会先自动重试三轮，全部失败才停在错误页。
+      for (var attempt = 0; attempt < 20; attempt++) {
         await tester.pump(const Duration(seconds: 1));
         await settle(tester);
       }

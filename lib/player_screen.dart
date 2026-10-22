@@ -143,6 +143,11 @@ class _PlayerScreenState extends State<PlayerScreen>
   Timer? _coalesceTimer;
   Timer? _healthTimer;
   Timer? _errorTimer;
+  Timer? _autoRetryTimer;
+  int _autoRetryCount = 0;
+  static const _autoRetryLimit = 3;
+  static const _autoRetrySettle = Duration(seconds: 10);
+  DateTime? _healthySince;
   Timer? _pictureInPictureExitTimer;
   Future<void> _operations = Future<void>.value();
   late int _index;
@@ -541,8 +546,19 @@ class _PlayerScreenState extends State<PlayerScreen>
       (_) => _saveProgress(),
     );
     _healthTimer = Timer.periodic(const Duration(seconds: 1), (_) {
-      if (!_closed &&
-          _acceptErrors &&
+      if (_closed) return;
+      final stable =
+          !_loading && _error == null && _player.state.playing && _playIntent;
+      if (stable) {
+        final since = _healthySince ??= DateTime.now();
+        if (_autoRetryCount > 0 &&
+            DateTime.now().difference(since) >= _autoRetrySettle) {
+          _autoRetryCount = 0;
+        }
+      } else {
+        _healthySince = null;
+      }
+      if (_acceptErrors &&
           !_loading &&
           _error == null &&
           _health.stalled(
@@ -1381,6 +1397,7 @@ class _PlayerScreenState extends State<PlayerScreen>
     _danmaku.setPlan(null);
     _errorTimer?.cancel();
     _pendingError = false;
+    _healthySince = null;
     final position = _currentPosition;
     final action = current.local
         ? PlaybackRecoveryAction.stop
@@ -1414,6 +1431,7 @@ class _PlayerScreenState extends State<PlayerScreen>
         });
       } catch (_) {}
       if (mounted && !_closed && ticket == _generation) {
+        if (!current.local && _scheduleAutoRetry(position)) return;
         setState(() {
           _loading = false;
           _localFailure = current.local;
@@ -1429,6 +1447,40 @@ class _PlayerScreenState extends State<PlayerScreen>
       return;
     }
     await _play(_index, position: position, recoveryAction: action);
+  }
+
+  bool _scheduleAutoRetry(double position, {Duration? delay}) {
+    if (_closed ||
+        !mounted ||
+        widget.store.profileEpoch != _profileEpoch ||
+        widget.store.locked) {
+      return false;
+    }
+    if (_autoRetryCount >= _autoRetryLimit) return false;
+    final attempt = ++_autoRetryCount;
+    _autoRetryTimer?.cancel();
+    _errorTimer?.cancel();
+    _pendingError = false;
+    _healthySince = null;
+    _recovery.reset();
+    _recordPlayback('自动重试播放', message: '第 $attempt/$_autoRetryLimit 次');
+    setState(() {
+      _loading = true;
+      _error = null;
+      _localFailure = false;
+      _loadingMessage = '线路暂时不可用，正在自动重试 $attempt/$_autoRetryLimit';
+    });
+    final ticket = _generation;
+    _autoRetryTimer = Timer(delay ?? Duration(milliseconds: 800 * attempt), () {
+      if (_closed ||
+          !mounted ||
+          ticket != _generation ||
+          widget.store.profileEpoch != _profileEpoch) {
+        return;
+      }
+      unawaited(_play(_index, position: position, automatic: true));
+    });
+    return true;
   }
 
   void _togglePlayback() {
@@ -1521,6 +1573,7 @@ class _PlayerScreenState extends State<PlayerScreen>
     PlaybackPlan? handoffPlan,
     bool showControlsOnReady = true,
     int? route,
+    bool automatic = false,
   }) async {
     if (_closed ||
         _seasonCommitting ||
@@ -1529,6 +1582,8 @@ class _PlayerScreenState extends State<PlayerScreen>
         index >= widget.detail.episodes.length) {
       return;
     }
+    _autoRetryTimer?.cancel();
+    if (!automatic && recoveryAction == null) _autoRetryCount = 0;
     _watchSession.setPlaying(false);
     _interactions.cancel();
     if (widget.handoff != null &&
@@ -1627,7 +1682,10 @@ class _PlayerScreenState extends State<PlayerScreen>
       _loadingMessage = switch (recoveryAction) {
         PlaybackRecoveryAction.alternative => '正在切换备用线路',
         PlaybackRecoveryAction.refresh => '正在重新获取播放地址',
-        _ => '正在准备播放',
+        _ =>
+          automatic && _autoRetryCount > 0
+              ? '正在自动重试 $_autoRetryCount/$_autoRetryLimit'
+              : '正在准备播放',
       };
     });
     LanController.current?.detachPlayback(_lanIdentity);
@@ -1783,11 +1841,21 @@ class _PlayerScreenState extends State<PlayerScreen>
             await widget.repository.release(prepared.session);
           }
           if (mounted && !_closed && ticket == _generation) {
+            final localFailure =
+                (error is AppFailure && error.code == 'local_media') ||
+                (widget.localOnly && !_forceOnline);
+            final staleSession =
+                error is AppFailure && error.message.contains('线路已失效');
+            if (!localFailure &&
+                _scheduleAutoRetry(
+                  position,
+                  delay: staleSession ? Duration.zero : null,
+                )) {
+              return;
+            }
             setState(() {
               _loading = false;
-              _localFailure =
-                  (error is AppFailure && error.code == 'local_media') ||
-                  (widget.localOnly && !_forceOnline);
+              _localFailure = localFailure;
               _error = error is AppFailure ? error.message : '无法播放这一集，请重试或换一集。';
               widget.handoff?.fail(_error!);
             });
@@ -2426,6 +2494,7 @@ class _PlayerScreenState extends State<PlayerScreen>
     _coalesceTimer?.cancel();
     _healthTimer?.cancel();
     _errorTimer?.cancel();
+    _autoRetryTimer?.cancel();
     _recommendationProgressTimer?.cancel();
     _recommendationProgressTimer = null;
     _recommendationGeneration++;
@@ -2861,12 +2930,6 @@ class _PlayerScreenState extends State<PlayerScreen>
         onTap: () => unawaited(_openMobileEpisodes()),
       ),
       PlayerSideAction(
-        key: const ValueKey('player-side-synopsis'),
-        tooltip: '简介',
-        icon: Icons.info_outline_rounded,
-        onTap: () => unawaited(_openMobileSynopsisSheet()),
-      ),
-      PlayerSideAction(
         key: const ValueKey('player-side-recommendations'),
         tooltip: '推荐',
         icon: Icons.movie_filter_outlined,
@@ -2974,11 +3037,6 @@ class _PlayerScreenState extends State<PlayerScreen>
       await _play(index);
     }
   }
-
-  Future<void> _openMobileSynopsisSheet() => _openMobileSheet<void>(
-    (sheetContext) =>
-        _mobileSheetContainer(sheetContext, _mobileSynopsis(), title: '简介'),
-  );
 
   Future<void> _openMobileRecommendationsSheet() => _openMobileSheet<void>(
     (sheetContext) => _mobileSheetContainer(
@@ -3253,93 +3311,6 @@ class _PlayerScreenState extends State<PlayerScreen>
       );
       _recommendationLoading = false;
     });
-  }
-
-  Widget _mobileSynopsis() => PlayerSynopsisView(
-    detail: widget.detail,
-    repository: widget.repository,
-    followControl: _mobileFollowControl(widget.detail.drama),
-  );
-
-  Widget _mobileFollowControl(Drama drama) {
-    final state = widget.store.following(drama.id);
-    return Tooltip(
-      message: '追剧与观看状态',
-      child: Builder(
-        builder: (menuContext) => InkWell(
-          key: const ValueKey('player-follow-status'),
-          borderRadius: BorderRadius.circular(10),
-          onTap: () => unawaited(_openFollowMenu(menuContext, drama, state)),
-          child: Container(
-            constraints: const BoxConstraints(minHeight: 36),
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-            decoration: BoxDecoration(
-              color: state == null
-                  ? Theme.of(context).colorScheme.surfaceContainerHighest
-                  : Theme.of(context).colorScheme.secondaryContainer,
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(
-                  state == null
-                      ? Icons.bookmark_add_outlined
-                      : Icons.bookmark_rounded,
-                  size: 18,
-                ),
-                const SizedBox(width: 6),
-                Text(state?.label ?? '加入追剧'),
-                const SizedBox(width: 2),
-                const Icon(Icons.expand_more_rounded, size: 16),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Future<void> _openFollowMenu(
-    BuildContext menuContext,
-    Drama drama,
-    FollowState? state,
-  ) async {
-    final anchor = glassMenuAnchor(menuContext);
-    if (anchor == null) return;
-    final value = await showGlassMenu<String>(
-      context: menuContext,
-      anchor: anchor,
-      autofocusSelected: true,
-      entries: [
-        for (final status in FollowStatus.values)
-          GlassMenuEntry(
-            value: status.name,
-            label: Text(status.label),
-            selected: state?.status == status,
-          ),
-        if (state != null)
-          const GlassMenuEntry(
-            value: 'remove',
-            label: Text('取消追剧'),
-            leading: Icon(Icons.bookmark_remove_outlined),
-          ),
-      ],
-    );
-    if (value == null || !mounted || _closed) return;
-    if (_profileEpoch != widget.store.profileEpoch) return;
-    if (value == 'remove') {
-      await saveUserChange(context, () => widget.store.toggleFavorite(drama));
-    } else {
-      final status = FollowStatus.values.firstWhere(
-        (status) => status.name == value,
-      );
-      await saveUserChange(
-        context,
-        () => widget.store.setFollowStatus(drama, status),
-      );
-    }
-    if (mounted && !_closed) setState(() {});
   }
 
   Widget _mobileDownload() {
