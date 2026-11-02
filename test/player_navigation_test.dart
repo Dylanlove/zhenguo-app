@@ -185,7 +185,8 @@ void main() {
       ),
     );
     await tester.tap(find.text('打开播放器'));
-    for (var index = 0; index < 7; index++) {
+    // 失败后会先自动重试三轮，全部失败才停在错误页。
+    for (var index = 0; index < 20; index++) {
       await tester.pump(const Duration(seconds: 1));
       await tester.pump(const Duration(milliseconds: 50));
     }

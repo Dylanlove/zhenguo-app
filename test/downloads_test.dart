@@ -251,17 +251,11 @@ void main() {
     expect(find.byKey(const ValueKey('player-favorite')), findsNothing);
     expect(find.byKey(const ValueKey('player-volume')), findsNothing);
     expect(find.byKey(const ValueKey('player-side-episodes')), findsOneWidget);
-    expect(find.byKey(const ValueKey('player-side-synopsis')), findsOneWidget);
+    expect(find.byKey(const ValueKey('player-side-synopsis')), findsNothing);
     expect(find.byKey(const ValueKey('player-side-download')), findsOneWidget);
     expect(find.text('追剧'), findsNothing);
     expect(find.text('加入追剧'), findsNothing);
     expect(find.byKey(const ValueKey('player-follow-status')), findsNothing);
-    await tester.tap(find.byKey(const ValueKey('player-side-synopsis')));
-    await tester.pumpAndSettle();
-    expect(find.byKey(const ValueKey('player-follow-status')), findsOneWidget);
-    expect(find.text('加入追剧'), findsOneWidget);
-    await tester.tap(find.byKey(const ValueKey('player-sheet-close')));
-    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('player-side-download')));
     await tester.pumpAndSettle();
     expect(find.text('下载选集'), findsOneWidget);

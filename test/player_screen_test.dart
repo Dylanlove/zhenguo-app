@@ -198,16 +198,18 @@ void main() {
       final repository = RouteRepository()..broken = true;
       final player = ScriptedPlayer();
       await mount(tester, repository, player);
-      for (var i = 0; i < 5; i++) {
+      // 自动重试三轮，每轮都会重走换线与重新解析，全部失败后才停在错误页。
+      for (var i = 0; i < 20; i++) {
         await tester.pump(const Duration(seconds: 1));
         await settleOperations(tester);
       }
-      expect(repository.primaryCalls, 2);
-      expect(repository.fallbackCalls, 1);
       expect(find.text('暂时无法播放'), findsOneWidget);
       expect(repository.active, isEmpty);
+      expect(repository.primaryCalls, greaterThan(2));
+      final attempts = repository.primaryCalls + repository.fallbackCalls;
       await tester.pump(const Duration(seconds: 25));
-      expect(repository.primaryCalls + repository.fallbackCalls, 3);
+      await settleOperations(tester);
+      expect(repository.primaryCalls + repository.fallbackCalls, attempts);
       repository.broken = false;
       await tester.tap(find.text('重试播放'));
       await settleOperations(tester);
@@ -227,32 +229,37 @@ void main() {
         );
         final player = ScriptedPlayer();
         await mount(tester, repository, player);
-        for (var attempt = 0; attempt < 10; attempt++) {
+        for (var attempt = 0; attempt < (exhausted ? 40 : 10); attempt++) {
           await tester.pump(const Duration(seconds: 1));
           await settleOperations(tester);
         }
-        expect(repository.fallbackCalls, 6);
-        expect(repository.primaryCalls, exhausted ? 2 : 1);
-        expect(repository.openedRoutes, [
-          0,
-          1,
-          2,
-          3,
-          4,
-          5,
-          6,
-          if (exhausted) 0,
-        ]);
-        expect(repository.active, hasLength(exhausted ? 0 : 1));
         if (exhausted) {
+          // 自动重试会重新走一遍线路列表，直到三轮用尽才停在错误页。
+          expect(repository.openedRoutes.take(8).toList(), [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            0,
+          ]);
+          expect(repository.fallbackCalls, greaterThan(6));
+          expect(repository.primaryCalls, greaterThan(2));
+          expect(repository.active, isEmpty);
           expect(find.text('暂时无法播放'), findsOneWidget);
+          final attempts = repository.openedRoutes.length;
           await tester.pump(const Duration(seconds: 25));
-          expect(repository.primaryCalls, 2);
-          expect(repository.fallbackCalls, 6);
+          expect(repository.openedRoutes.length, attempts);
           repository.workingRoute = 0;
           await tester.tap(find.text('重试播放'));
           await settleOperations(tester);
-          expect(repository.primaryCalls, 3);
+          expect(repository.active, hasLength(1));
+        } else {
+          expect(repository.fallbackCalls, 6);
+          expect(repository.primaryCalls, 1);
+          expect(repository.openedRoutes, [0, 1, 2, 3, 4, 5, 6]);
           expect(repository.active, hasLength(1));
         }
         expect(find.text('暂时无法播放'), findsNothing);
@@ -318,7 +325,7 @@ void main() {
         findsOneWidget,
       );
       expect(
-        find.byKey(const ValueKey('player-side-synopsis')),
+        find.byKey(const ValueKey('player-side-recommendations')),
         findsOneWidget,
       );
       expect(
@@ -338,6 +345,10 @@ void main() {
       expect(find.byKey(const ValueKey('player-progress')), findsNothing);
       expect(find.byKey(const ValueKey('player-side-episodes')), findsNothing);
       expect(find.byKey(const ValueKey('player-side-synopsis')), findsNothing);
+      expect(
+        find.byKey(const ValueKey('player-side-recommendations')),
+        findsNothing,
+      );
       expect(find.byKey(const ValueKey('player-side-download')), findsNothing);
       await unmount(tester, player);
     } finally {
