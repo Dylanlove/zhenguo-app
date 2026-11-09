@@ -11,11 +11,6 @@ const nativeBoardSources = <String, String>{
   'hongguo-real': 'hongguo',
   'hongguo-comic': 'hongguo',
   'hongguo-ai': 'hongguo',
-  'huangdou-all': 'huangdou',
-  'huangdou-mogai': 'huangdou',
-  'huangdou-search': 'huangdou',
-  'huangdou-favorite': 'huangdou',
-  'huangdou-finish': 'huangdou',
   'huangguo-hot': 'huangguoai',
   'huangguo-recommend': 'huangguoai',
   'huangguo-potential': 'huangguoai',
@@ -31,11 +26,6 @@ const nativeBoardSources = <String, String>{
   'heguo-romance': 'heguo',
   'xingguo-recommend': 'xingguo',
   'huaguo-drama': 'huaguo',
-  'wuguo-urban': 'wuguo',
-  'wuguo-counter': 'wuguo',
-  'wuguo-travel': 'wuguo',
-  'wuguo-female': 'wuguo',
-  'wuguo-male': 'wuguo',
   'chaoguo-hot': 'chaoguo',
   'chaoguo-mainstream': 'chaoguo',
   'chaoguo-adult': 'chaoguo',
@@ -48,7 +38,14 @@ const nativeBoardSources = <String, String>{
 
 void main() {
   test('retired sources have no source entry or ranking route', () {
-    for (final id in ['fanguo', 'guanguo', 'niuguo']) {
+    for (final id in [
+      'fanguo',
+      'guanguo',
+      'niuguo',
+      'huangdou',
+      'liguo',
+      'wuguo',
+    ]) {
       expect(SourceSite.isKnown(id), isFalse);
       expect(SourceSite.isAvailable(id), isFalse);
       expect(SourceSite.knownValues.any((source) => source.id == id), isFalse);

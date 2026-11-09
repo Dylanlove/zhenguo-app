@@ -92,7 +92,6 @@ var duanjuProviderCatalog = []duanjuSourceSpec{
 	{ID: sourceXingguo, Name: "星果", Base: xingguoBaseURL, Kind: "api", Searcher: true, Paged: true},
 	{ID: sourceHuaguo, Name: "花果", Base: huaguoBaseURL, Kind: "maccms", Searcher: true, Paged: true},
 
-	{ID: sourceWuguo, Name: "伍果", Base: wuguoBaseURL, Kind: "maccms", Searcher: true, Paged: true},
 	{ID: sourceChaoguo, Name: "超果", Base: chaoguoBaseURL, Kind: "web", Searcher: true, Paged: true},
 	{ID: sourceMiguo, Name: "米果", Base: miguoBaseURL, Kind: "maccms", Searcher: true},
 	{ID: sourceShuangguo, Name: "爽果", Base: shuangguoBaseURL, Kind: "maccms", Searcher: true, Paged: true},
@@ -106,7 +105,6 @@ var duanjuProviderCatalog = []duanjuSourceSpec{
 	// 以下两站共用同一套 maccms 后端与模板族，列表页直接给出播放页，站内无分页。
 	{ID: sourceYingguo, Name: "樱果", Base: yingguoBaseURL, Kind: "maccms", Searcher: true, Single: true},
 	{ID: sourceLuguo, Name: "露果", Base: luguoBaseURL, Kind: "maccms", Searcher: true, Single: true},
-	{ID: sourceLiguo, Name: "荔果", Base: liguoBaseURL, Kind: "maccms", Searcher: true, Single: true},
 	{ID: sourceJuguo, Name: "橘果", Base: juguoBaseURL, Kind: "maccms", Searcher: true, Single: true},
 	{ID: sourceZaoguo, Name: "枣果", Base: zaoguoBaseURL, Kind: "maccms", Searcher: true, Single: true},
 	{ID: sourceNingguo, Name: "柠果", Base: ningguoBaseURL, Kind: "maccms", Searcher: true, Single: true},
@@ -139,7 +137,6 @@ var duanjuSourceAliases = map[string]string{
 	"xingguo": "xingguo", "xingxing": sourceXingguo, "星星": sourceXingguo, "read.api.duodutek.com": sourceXingguo,
 	"huaguo": "huaguo", "huasheng": sourceHuaguo, "花生": sourceHuaguo, "www.zywest263.com": sourceHuaguo,
 
-	"wuguo": "wuguo", "wuwu": sourceWuguo, "五五": sourceWuguo, "www.duanju55.com": sourceWuguo,
 	"chaoguo": "chaoguo", "chaoduanju": sourceChaoguo, "超短剧": sourceChaoguo, "超果": sourceChaoguo,
 	"shanekids": sourceChaoguo, "www.shanekids.com": sourceChaoguo, "shanekids.com": sourceChaoguo,
 	"miguo": "miguo", "dami": sourceMiguo, "大米": sourceMiguo, "大米星球": sourceMiguo,
@@ -164,8 +161,6 @@ var duanjuSourceAliases = map[string]string{
 	"missav02.xyz": sourceYingguo, "www.missav02.xyz": sourceYingguo,
 	"luguo": "luguo", "露果": sourceLuguo, "撸一天": sourceLuguo,
 	"luyitian.com": sourceLuguo, "www.luyitian.com": sourceLuguo,
-	"liguo": "liguo", "荔果": sourceLiguo, "日日撸": sourceLiguo,
-	"ririlu.cc": sourceLiguo, "www.ririlu.cc": sourceLiguo,
 	"juguo": "juguo", "橘果": sourceJuguo, "海角乱伦": sourceJuguo,
 	"bulunhufait.buzz": sourceJuguo,
 	"zaoguo":           "zaoguo", "枣果": sourceZaoguo, "银河视频": sourceZaoguo,

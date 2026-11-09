@@ -6,7 +6,7 @@ func TestRemovedDuanjuSourcesCannotBeDispatched(t *testing.T) {
 	previous := buildAllSources
 	buildAllSources = "true"
 	t.Cleanup(func() { buildAllSources = previous })
-	for _, source := range []string{"fanguo", "guanguo", "niuguo", "xifan", "weiguan", "niuniu"} {
+	for _, source := range []string{"fanguo", "guanguo", "niuguo", "xifan", "weiguan", "niuniu", "huangdou", "liguo", "wuguo"} {
 		if isDuanjuProviderSource(source) || nativeSourceAvailable(source) || duanjuSupportsSearch(source) || duanjuSupportsPaging(source) {
 			t.Fatalf("removed source remains callable: %s", source)
 		}
@@ -15,7 +15,8 @@ func TestRemovedDuanjuSourcesCannotBeDispatched(t *testing.T) {
 		}
 	}
 	for _, board := range rankingBoards {
-		if board.Source == "fanguo" || board.Source == "guanguo" || board.Source == "niuguo" {
+		if board.Source == "fanguo" || board.Source == "guanguo" || board.Source == "niuguo" ||
+			board.Source == "huangdou" || board.Source == "liguo" || board.Source == "wuguo" {
 			t.Fatalf("removed source still has a ranking: %s", board.ID)
 		}
 	}

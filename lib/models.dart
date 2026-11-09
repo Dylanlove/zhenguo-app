@@ -54,7 +54,6 @@ class SourceSite {
   bool get duanjuPaged => const {
     'yaguo',
     'huaguo',
-    'wuguo',
     'maoguo',
     'heguo',
     'xingguo',
@@ -103,7 +102,6 @@ class SourceSite {
     SourceSite('heguo', '河果', '河马剧场 · 网页接口'),
     SourceSite('xingguo', '星果', '星星短剧 · 连载接口'),
     SourceSite('huaguo', '花果', '花生短剧 · 网页目录'),
-    SourceSite('wuguo', '伍果', '五五短剧 · 网页目录'),
     SourceSite('chaoguo', '超果', '超短剧 · AI 成人短剧', adult: true),
     SourceSite('miguo', '米果', '大米星球 · 网页目录'),
     SourceSite('shuangguo', '爽果', '短剧网 · 网页目录'),
@@ -116,7 +114,6 @@ class SourceSite {
     SourceSite('xiaoguo', '宵果', '夜色 · 网页目录', adult: true),
     SourceSite('yingguo', '樱果', 'MissAV · 网页目录', adult: true),
     SourceSite('luguo', '露果', '撸一天 · 网页目录', adult: true),
-    SourceSite('liguo', '荔果', '日日撸 · 网页目录', adult: true),
     SourceSite('juguo', '橘果', '海角乱伦 · 网页目录', adult: true),
     SourceSite('zaoguo', '枣果', '银河视频 · 网页目录', adult: true),
     SourceSite('ningguo', '柠果', '愛豆AV · 网页目录', adult: true),
@@ -124,7 +121,6 @@ class SourceSite {
   ];
   static const allValues = [
     hongguo,
-    SourceSite('huangdou', '豆果', '魔改短剧 · 网页目录', adult: true),
     SourceSite('huangju', '剧果', '红果黄剧 · AI 成人短剧', adult: true),
     SourceSite('yeguo', '野果', '野果短剧 · AI 成人短剧', adult: true),
     dsd,

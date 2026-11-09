@@ -27,13 +27,13 @@ func duanjuFixtureDownloader(t *testing.T, handler http.HandlerFunc) (*Downloade
 }
 
 func TestDuanjuRegistryKeepsDistinctIdentitiesFromExistingSources(t *testing.T) {
-	existing := []string{sourceHongguo, sourceHuangdou, sourceHuangju, sourceYeguo, sourceDSD, sourceHuangguoAI, sourceHuangguoVideo, sourceCloudFront}
+	existing := []string{sourceHongguo, sourceHuangju, sourceYeguo, sourceDSD, sourceHuangguoAI, sourceHuangguoVideo, sourceCloudFront}
 	seen := map[string]bool{}
 	for _, source := range existing {
 		seen[source] = true
 	}
-	if len(duanjuProviderCatalog) != 23 {
-		t.Fatalf("duanju catalog should register 23 sources, got %d", len(duanjuProviderCatalog))
+	if len(duanjuProviderCatalog) != 21 {
+		t.Fatalf("duanju catalog should register 21 sources, got %d", len(duanjuProviderCatalog))
 	}
 	for _, spec := range duanjuProviderCatalog {
 		if seen[spec.ID] {
@@ -125,13 +125,13 @@ func TestDuanjuMaccmsParsesCardsAndPlaylist(t *testing.T) {
 		<span class="meta-post-type2">更新至12集</span></div>
 		</div></body></html>`))
 	})
-	d.providerHosts[sourceWuguo] = server.URL
+	d.providerHosts[sourceHuaguo] = server.URL
 
-	items, more, err := d.fetchMaccmsCatalogPage(context.Background(), sourceWuguo, 1, "/type/duanju.html")
+	items, more, err := d.fetchMaccmsCatalogPage(context.Background(), sourceHuaguo, 1, "/type/duanju.html")
 	if err != nil || len(items) != 1 || !more {
 		t.Fatalf("maccms catalog failed: %+v %v", items, err)
 	}
-	if items[0].ID != "wuguo:100" || items[0].Source != sourceWuguo {
+	if items[0].ID != "huaguo:100" || items[0].Source != sourceHuaguo {
 		t.Fatalf("maccms card identity is wrong: %+v", items[0])
 	}
 	if items[0].Cover != server.URL+"/pic/100.jpg" {
@@ -141,7 +141,7 @@ func TestDuanjuMaccmsParsesCardsAndPlaylist(t *testing.T) {
 		t.Fatalf("maccms episode count is wrong: %+v", items[0].EpisodeCount)
 	}
 
-	drama, chapters, err := d.fetchMaccmsDetail(context.Background(), sourceWuguo, "100")
+	drama, chapters, err := d.fetchMaccmsDetail(context.Background(), sourceHuaguo, "100")
 	if err != nil || len(chapters) != 2 {
 		t.Fatalf("maccms detail failed: %+v %v", chapters, err)
 	}
@@ -305,7 +305,7 @@ func TestDuanjuHeguoParsesNextDataWrappedResponses(t *testing.T) {
 }
 
 func TestDuanjuSearchAndPagingSupportMatchesCatalog(t *testing.T) {
-	supported := []string{sourceYaguo, sourceMaoguo, sourceHeguo, sourceXingguo, sourceHuaguo, sourceWuguo}
+	supported := []string{sourceYaguo, sourceMaoguo, sourceHeguo, sourceXingguo, sourceHuaguo}
 	for _, source := range supported {
 		if !duanjuSupportsSearch(source) {
 			t.Fatalf("%s should support online search", source)
@@ -381,8 +381,8 @@ func TestDuanjuRejectsMismatchedSourceIDsAndCategories(t *testing.T) {
 	if !validDuanjuCategory(sourceHeguo, "462") || !validDuanjuCategory(sourceHeguo, "417-464") {
 		t.Fatal("duanju rejected a valid numeric category")
 	}
-	if !validDuanjuCategory(sourceWuguo, "都市") {
-		t.Fatal("wuguo should accept a chinese category")
+	if !validDuanjuCategory(sourceHuaguo, "都市") {
+		t.Fatal("maccms sources should accept a chinese category")
 	}
 }
 
@@ -393,7 +393,7 @@ func TestDuanjuSourceAvailabilityFollowsBuildVariant(t *testing.T) {
 		t.Fatal("hongguo-only build must not expose duanju sources")
 	}
 	buildAllSources = "true"
-	if !nativeSourceAvailable(sourceYaguo) || !nativeSourceAvailable(sourceWuguo) {
+	if !nativeSourceAvailable(sourceYaguo) || !nativeSourceAvailable(sourceHuaguo) {
 		t.Fatal("all-sources build must expose duanju sources")
 	}
 	buildAllSources = previous

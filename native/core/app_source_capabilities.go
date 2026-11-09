@@ -20,7 +20,7 @@ type nativeSourceCapabilities struct {
 }
 
 func nativeCapabilities(version string) []nativeSourceCapabilities {
-	sources := []string{sourceHongguo, sourceHuangdou, sourceHuangju, sourceYeguo, sourceDSD, sourceHuangguoVideo, sourceHuangguoAI, sourceCloudFront, sourceIkanbot, sourceA123}
+	sources := []string{sourceHongguo, sourceHuangju, sourceYeguo, sourceDSD, sourceHuangguoVideo, sourceHuangguoAI, sourceCloudFront, sourceIkanbot, sourceA123}
 	for _, spec := range duanjuProviderCatalog {
 		sources = append(sources, spec.ID)
 	}
