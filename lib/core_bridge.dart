@@ -649,7 +649,7 @@ class NativeRepository extends AppRepository {
         seconds: action == 'moveDownloads'
             ? 620
             : action == 'preload'
-            ? 20
+            ? 60
             : action == 'libraryImport'
             ? 180
             : 70,

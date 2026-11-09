@@ -21,6 +21,7 @@ class PreloadEvent {
 
 class PlaybackPreloadPolicy {
   static const maxLead = Duration(minutes: 3);
+  static const minLead = Duration(seconds: 45);
 
   static bool shouldPrepare({
     required Duration position,
@@ -42,8 +43,9 @@ class PlaybackPreloadPolicy {
     final buffered = ahead >= math.min(5000.0, remaining);
     final settled = stableFor >= const Duration(seconds: 10);
     final halfway = at * 2 >= length && remaining <= maxLead.inMilliseconds;
-    if (buffered && (halfway || remaining <= 45000)) return true;
-    if (halfway && settled) return true;
+    final nearEnd = remaining <= minLead.inMilliseconds;
+    if (buffered && (halfway || nearEnd)) return true;
+    if ((halfway || nearEnd) && settled) return true;
     return buffer <= position && settled && remaining <= 30000;
   }
 }
@@ -68,6 +70,8 @@ class _PreloadSlot {
   DateTime retryAt = DateTime(2000);
   int generation = 0;
   String error = '';
+
+  bool validAt(DateTime now) => ready == null || now.isBefore(expires);
 }
 
 class PlaybackPreloader extends ChangeNotifier {
@@ -170,14 +174,13 @@ class PlaybackPreloader extends ChangeNotifier {
         request.online,
       );
       final slot = _slots[identity];
-      if (slot != null) {
+      if (slot != null && slot.validAt(_now())) {
         slot.request = request;
-        if (slot.ready != null && !_now().isBefore(slot.expires)) {
-          _removeSlot(slot, notify: false);
-          _event('预加载计划已过期', episode: request.episode);
-          changed = true;
-        }
         continue;
+      }
+      if (slot != null) {
+        _removeSlot(slot, notify: false);
+        _event('预加载计划已过期', episode: request.episode);
       }
       final fresh = _PreloadSlot(identity, request);
       _slots[identity] = fresh;
@@ -226,7 +229,7 @@ class PlaybackPreloader extends ChangeNotifier {
         return;
       }
       if (plan == null || plan.url.isEmpty) throw AppFailure('未取得预加载结果');
-      var expires = _now().add(const Duration(minutes: 2));
+      var expires = _now().add(const Duration(minutes: 5));
       if (plan.expiresAt > 0) {
         final authorizationExpiry = DateTime.fromMillisecondsSinceEpoch(
           plan.expiresAt,
@@ -278,7 +281,11 @@ class PlaybackPreloader extends ChangeNotifier {
   void _release(PlaybackPlan plan) =>
       unawaited(repository.release(plan.session).catchError((Object _) {}));
 
-  void _removeSlot(_PreloadSlot slot, {bool notify = true}) {
+  void _removeSlot(
+    _PreloadSlot slot, {
+    bool notify = true,
+    bool releaseReady = true,
+  }) {
     slot.generation++;
     slot.delay?.cancel();
     slot.delay = null;
@@ -288,7 +295,7 @@ class PlaybackPreloader extends ChangeNotifier {
     final ready = slot.ready;
     slot.ready = null;
     _slots.remove(slot.identity);
-    if (ready != null) _release(ready);
+    if (ready != null && releaseReady) _release(ready);
     if (notify && !_closed) notifyListeners();
   }
 
@@ -327,7 +334,7 @@ class PlaybackPreloader extends ChangeNotifier {
         : null;
     if (result != null && slot != null) {
       _event('下一集预加载复用', episode: episode, bytes: result.prefetchedBytes);
-      _removeSlot(slot, notify: false);
+      _removeSlot(slot, notify: false, releaseReady: false);
     } else {
       if (slot != null) {
         _removeSlot(slot, notify: false);

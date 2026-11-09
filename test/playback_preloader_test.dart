@@ -61,6 +61,7 @@ void main() {
       expect(claimed?.session, 'prepared');
       expect(repository.pending, hasLength(1));
       expect(repository.cancellations, 0);
+      expect(repository.released, isEmpty);
       preloader.dispose();
     });
   });
@@ -166,6 +167,81 @@ void main() {
       ),
       isFalse,
     );
+  });
+
+  test('复用预加载计划时把播放会话交给调用方', () {
+    fakeAsync((async) {
+      final repository = _PreloadRepository();
+      final preloader = PlaybackPreloader(repository);
+      preloader.prepare(FixtureRepository.free, [episode('target')]);
+      async.elapse(const Duration(milliseconds: 600));
+      repository.pending.single.complete(plan);
+      async.flushMicrotasks();
+      expect(
+        preloader.take(FixtureRepository.free, episode('target'))?.session,
+        'prepared',
+      );
+      async.flushMicrotasks();
+      expect(repository.released, isEmpty);
+      preloader.dispose();
+    });
+  });
+
+  test('预加载计划有效期覆盖整集播放', () {
+    fakeAsync((async) {
+      var clock = DateTime(2026, 1, 1);
+      final repository = _PreloadRepository();
+      final preloader = PlaybackPreloader(repository, now: () => clock);
+      preloader.prepare(FixtureRepository.free, [episode('target')]);
+      async.elapse(const Duration(milliseconds: 600));
+      repository.pending.single.complete(plan);
+      async.flushMicrotasks();
+      clock = clock.add(const Duration(minutes: 3));
+      expect(
+        preloader.take(FixtureRepository.free, episode('target'))?.session,
+        'prepared',
+      );
+      expect(repository.released, isEmpty);
+      preloader.dispose();
+    });
+  });
+
+  test('过期计划在同一次准备中立即重建', () {
+    fakeAsync((async) {
+      var clock = DateTime(2026, 1, 1);
+      final repository = _PreloadRepository();
+      final preloader = PlaybackPreloader(repository, now: () => clock);
+      preloader.prepare(FixtureRepository.free, [episode('target')]);
+      async.elapse(const Duration(milliseconds: 600));
+      repository.pending.single.complete(plan);
+      async.flushMicrotasks();
+      clock = clock.add(const Duration(minutes: 6));
+      preloader.prepare(FixtureRepository.free, [episode('target')]);
+      expect(repository.released, ['prepared']);
+      async.elapse(const Duration(milliseconds: 600));
+      expect(repository.pending, hasLength(2));
+      preloader.dispose();
+    });
+  });
+
+  test('短集与倍速在缓冲未知时也能提前准备', () {
+    bool ready({
+      required int at,
+      required int length,
+      int stable = 10,
+      double rate = 1,
+    }) => PlaybackPreloadPolicy.shouldPrepare(
+      position: Duration(seconds: at),
+      duration: Duration(seconds: length),
+      buffer: Duration.zero,
+      rate: rate,
+      stableFor: Duration(seconds: stable),
+    );
+    expect(ready(at: 15, length: 60), isTrue);
+    expect(ready(at: 10, length: 60), isFalse);
+    expect(ready(at: 15, length: 60, stable: 2), isFalse);
+    expect(ready(at: 40, length: 120, rate: 2), isTrue);
+    expect(ready(at: 1800, length: 3600), isFalse);
   });
 
   test('进度过半即后台预加载，长视频仍限制在剩余三分钟内', () {

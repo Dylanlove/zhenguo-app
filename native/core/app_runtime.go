@@ -392,7 +392,7 @@ func nativeDispatch(input nativeInput) (any, error) {
 			nativeState.engine = engine
 		}
 		nativeState.Unlock()
-		version := "0.2.188"
+		version := "0.2.189"
 		return map[string]any{"version": version, "standalone": true, "allSources": buildAllSources == "true", "capabilitySchema": 1, "sources": nativeCapabilities(version)}, nil
 	}
 	engine := nativeState.engine
@@ -404,7 +404,7 @@ func nativeDispatch(input nativeInput) (any, error) {
 	if input.Action == "moveDownloads" {
 		duration = 10 * time.Minute
 	} else if input.Action == "preload" {
-		duration = 15 * time.Second
+		duration = 55 * time.Second
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), duration)
 	defer cancel()

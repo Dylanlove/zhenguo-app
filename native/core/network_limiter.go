@@ -237,7 +237,7 @@ func (d *Downloader) doPreparedCatalogRequest(request *http.Request, timeout tim
 	if background, _ := request.Context().Value(backgroundCatalogKey{}).(bool); background {
 		ceiling := 8 * time.Second
 		if preload, _ := request.Context().Value(nativePreloadKey{}).(bool); preload {
-			ceiling = 20 * time.Second
+			ceiling = 30 * time.Second
 		}
 		if timeout <= 0 || timeout > ceiling {
 			timeout = ceiling

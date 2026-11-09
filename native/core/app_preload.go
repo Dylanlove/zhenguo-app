@@ -29,7 +29,7 @@ func (engine *nativeEngine) nativePreload(ctx context.Context, input nativeInput
 	stream := engine.stream
 	engine.mu.Unlock()
 	if exists && stream != nil && choice.streamSession != "" {
-		warming, cancel := context.WithTimeout(ctx, 6*time.Second)
+		warming, cancel := context.WithTimeout(ctx, 10*time.Second)
 		plan.PrefetchedBytes = stream.nativePrefetch(warming, choice.streamSession, plan.URL, input.Quality)
 		cancel()
 	}
@@ -151,7 +151,7 @@ func (stream *nativeStreamServer) nativePrefetch(ctx context.Context, token, ent
 				break
 			}
 			segments++
-			if master || segments >= 2 || seconds >= 8 {
+			if master || segments >= 3 || seconds >= 12 {
 				break
 			}
 		}
