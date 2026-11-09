@@ -20,6 +20,8 @@ class PreloadEvent {
 }
 
 class PlaybackPreloadPolicy {
+  static const maxLead = Duration(minutes: 3);
+
   static bool shouldPrepare({
     required Duration position,
     required Duration duration,
@@ -36,12 +38,13 @@ class PlaybackPreloadPolicy {
       return false;
     final speed = rate.isFinite && rate > 0 ? rate.clamp(.25, 4.0) : 1.0;
     final remaining = (length - at) / speed;
-    if (remaining > 45000) return false;
     final ahead = math.max(0, buffer.inMilliseconds - at) / speed;
-    if (ahead >= math.min(5000.0, remaining)) return true;
-    return buffer <= position &&
-        stableFor >= const Duration(seconds: 10) &&
-        remaining <= 30000;
+    final buffered = ahead >= math.min(5000.0, remaining);
+    final settled = stableFor >= const Duration(seconds: 10);
+    final halfway = at * 2 >= length && remaining <= maxLead.inMilliseconds;
+    if (buffered && (halfway || remaining <= 45000)) return true;
+    if (halfway && settled) return true;
+    return buffer <= position && settled && remaining <= 30000;
   }
 }
 
@@ -252,7 +255,7 @@ class PlaybackPreloader extends ChangeNotifier {
         return;
       }
       slot.error = failure.toString();
-      slot.retryAt = _now().add(const Duration(seconds: 30));
+      slot.retryAt = _now().add(const Duration(seconds: 12));
       _event(
         '下一集预加载失败',
         episode: slot.request.episode,
@@ -294,6 +297,7 @@ class PlaybackPreloader extends ChangeNotifier {
     Episode episode, {
     int quality = 0,
     bool online = false,
+    Duration wait = const Duration(milliseconds: 900),
     required bool Function() stillCurrent,
   }) async {
     final identity = _key(drama, episode, quality, online);
@@ -302,10 +306,7 @@ class PlaybackPreloader extends ChangeNotifier {
         slot != null &&
         slot.ready == null &&
         slot.pending != null) {
-      await slot.pending!.future.timeout(
-        const Duration(milliseconds: 900),
-        onTimeout: () {},
-      );
+      await slot.pending!.future.timeout(wait, onTimeout: () {});
     }
     if (_closed || !stillCurrent()) return null;
     return take(drama, episode, quality: quality, online: online);

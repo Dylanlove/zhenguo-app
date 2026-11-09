@@ -167,4 +167,25 @@ void main() {
       isFalse,
     );
   });
+
+  test('进度过半即后台预加载，长视频仍限制在剩余三分钟内', () {
+    bool ready({
+      required int at,
+      required int length,
+      int buffer = 0,
+      int stable = 10,
+      double rate = 1,
+    }) => PlaybackPreloadPolicy.shouldPrepare(
+      position: Duration(seconds: at),
+      duration: Duration(seconds: length),
+      buffer: Duration(seconds: buffer),
+      rate: rate,
+      stableFor: Duration(seconds: stable),
+    );
+    expect(ready(at: 60, length: 120, buffer: 65, stable: 2), isTrue);
+    expect(ready(at: 90, length: 180, buffer: 95, stable: 2), isTrue);
+    expect(ready(at: 50, length: 120, buffer: 55, stable: 10), isFalse);
+    expect(ready(at: 1800, length: 3600, buffer: 1810, stable: 20), isFalse);
+    expect(ready(at: 60, length: 120, buffer: 65, rate: 2), isTrue);
+  });
 }

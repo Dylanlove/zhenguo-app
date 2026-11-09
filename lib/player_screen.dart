@@ -472,7 +472,7 @@ class _PlayerScreenState extends State<PlayerScreen>
               !_panelOpen &&
               _index + 1 < widget.detail.episodes.length) {
             _watchSession.completeEpisode();
-            _play(_index + 1, showControlsOnReady: false);
+            _play(_index + 1, showControlsOnReady: false, preloadWait: true);
           } else {
             _watchSession.completeEpisode();
             _playIntent = false;
@@ -1574,6 +1574,7 @@ class _PlayerScreenState extends State<PlayerScreen>
     bool showControlsOnReady = true,
     int? route,
     bool automatic = false,
+    bool preloadWait = false,
   }) async {
     if (_closed ||
         _seasonCommitting ||
@@ -1614,6 +1615,9 @@ class _PlayerScreenState extends State<PlayerScreen>
                 widget.detail.episodes[index],
                 quality: _requestedQuality,
                 online: _forceOnline,
+                wait: preloadWait
+                    ? const Duration(milliseconds: 2500)
+                    : const Duration(milliseconds: 900),
                 stillCurrent: () =>
                     !_closed &&
                     ticket == _generation &&

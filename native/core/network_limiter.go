@@ -234,8 +234,14 @@ func (d *Downloader) doCatalogRequestWithTimeout(request *http.Request, timeout 
 }
 
 func (d *Downloader) doPreparedCatalogRequest(request *http.Request, timeout time.Duration, prepare func(*http.Request)) (*http.Response, error) {
-	if background, _ := request.Context().Value(backgroundCatalogKey{}).(bool); background && (timeout <= 0 || timeout > 8*time.Second) {
-		timeout = 8 * time.Second
+	if background, _ := request.Context().Value(backgroundCatalogKey{}).(bool); background {
+		ceiling := 8 * time.Second
+		if preload, _ := request.Context().Value(nativePreloadKey{}).(bool); preload {
+			ceiling = 20 * time.Second
+		}
+		if timeout <= 0 || timeout > ceiling {
+			timeout = ceiling
+		}
 	}
 	release, err := d.limiter.acquire(request.Context(), request)
 	if err != nil {
