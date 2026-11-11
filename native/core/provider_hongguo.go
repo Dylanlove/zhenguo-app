@@ -194,6 +194,10 @@ func parseRouterData(raw string) map[string]any {
 	return data
 }
 
+// resolveHongguoMedia 是红果的 App 高清取流路径（内部已含 fallback_api 二次取流）。
+// 它保持「纯 App 取流」语义：当高清接口被风控、返回空模型或会话失效时，会做一次会话续期后
+// 直接上报「高清接口不可用」错误，而不会静默降级到网页公开低清——该契约由
+// TestHongguoSignedPlaybackDoesNotFallBackToPublicVideo 守护。多链路回退见 resolveHongguoMediaWithFallback。
 func (d *Downloader) resolveHongguoMedia(ctx context.Context, task Task) (providerMedia, error) {
 	source, seriesID, ok := splitProviderDramaID(task.DramaID)
 	if !ok || source != sourceHongguo {
@@ -208,6 +212,56 @@ func (d *Downloader) resolveHongguoMedia(ctx context.Context, task Task) (provid
 		return providerMedia{}, fmt.Errorf("红果高清接口取流失败：%w", err)
 	}
 	return d.prepareHongguoMedia(ctx, media)
+}
+
+// resolveHongguoMediaWithFallback 在红果 App 取流失败（被风控、空模型、会话失效等）时，
+// 按优先级回退到网页公开播放与备用解析接口，消除单点故障，根治「线路不可用 / 无法播放」。
+// 回退由这一编排层负责，resolveHongguoMedia 自身仍保持「不静默降级到公开低清」的纯取流语义。
+func (d *Downloader) resolveHongguoMediaWithFallback(ctx context.Context, task Task) (providerMedia, error) {
+	source, seriesID, ok := splitProviderDramaID(task.DramaID)
+	if !ok || source != sourceHongguo {
+		return providerMedia{}, fmt.Errorf("红果章节缺少剧 ID，请刷新剧库后重新加入队列")
+	}
+	videoID := strings.TrimPrefix(task.Chapter.VideoURL, "hongguo-cenc://")
+	if !hongguoNumericID.MatchString(videoID) || !hongguoNumericID.MatchString(seriesID) {
+		return providerMedia{}, fmt.Errorf("红果章节 ID 无效，请重新获取章节")
+	}
+	type attempt struct {
+		name string
+		call func(context.Context) (providerMedia, error)
+	}
+	chain := []attempt{
+		{"App 高清接口", func(c context.Context) (providerMedia, error) { return d.resolveHongguoMedia(c, task) }},
+		{"网页公开播放", func(c context.Context) (providerMedia, error) {
+			media, err := d.resolveHongguoWebMedia(c, seriesID, videoID)
+			if err != nil {
+				return media, err
+			}
+			media.RouteName = "红果网页公开"
+			return d.prepareHongguoMedia(c, media)
+		}},
+		{"备用解析接口", func(c context.Context) (providerMedia, error) {
+			media, err := d.resolveHongguoPlaybackAPI(c, seriesID, videoID)
+			if err != nil {
+				return media, err
+			}
+			media.RouteName = "红果备用接口"
+			return d.prepareHongguoMedia(c, media)
+		}},
+	}
+	var lastErr error
+	for _, step := range chain {
+		if ctx.Err() != nil {
+			return providerMedia{}, ctx.Err()
+		}
+		media, err := step.call(ctx)
+		if err != nil {
+			lastErr = err
+			continue
+		}
+		return media, nil
+	}
+	return providerMedia{}, fmt.Errorf("红果全部取流链路均不可用：%w", lastErr)
 }
 
 func (d *Downloader) prepareHongguoMedia(ctx context.Context, media providerMedia) (providerMedia, error) {

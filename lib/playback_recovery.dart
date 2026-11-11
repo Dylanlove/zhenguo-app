@@ -15,17 +15,29 @@ class PlaybackRecovery {
 
   PlaybackRecoveryAction next(PlaybackPlan plan) {
     final count = _routeCount ??= plan.routeCount;
-    if (_refreshed ||
-        plan.routeIndex <= _lastRoute ||
-        plan.routeIndex >= count) {
+    if (plan.routeIndex > _lastRoute && plan.routeIndex < count) {
+      // 这条线路尚未尝试过：先逐条切换到备用线路，最后一条仍失败时再刷新。
+      _lastRoute = plan.routeIndex;
+      if (plan.hasAlternative && plan.routeIndex + 1 < count) {
+        return PlaybackRecoveryAction.alternative;
+      }
+      if (!_refreshed) {
+        _refreshed = true;
+        _lastRoute = -1;
+        _routeCount = null;
+        return PlaybackRecoveryAction.refresh;
+      }
       return PlaybackRecoveryAction.stop;
     }
-    _lastRoute = plan.routeIndex;
-    if (plan.hasAlternative && plan.routeIndex + 1 < count) {
-      return PlaybackRecoveryAction.alternative;
+    // 当前线路已经尝试过或超出范围：尚未刷新过时重新解析地址。
+    // 刷新会得到一份全新的线路列表，应当被完整遍历，而不是只试第一条就放弃。
+    if (!_refreshed) {
+      _refreshed = true;
+      _lastRoute = -1;
+      _routeCount = null;
+      return PlaybackRecoveryAction.refresh;
     }
-    _refreshed = true;
-    return PlaybackRecoveryAction.refresh;
+    return PlaybackRecoveryAction.stop;
   }
 }
 

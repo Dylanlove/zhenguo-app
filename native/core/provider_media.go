@@ -207,7 +207,7 @@ func (d *Downloader) resolveProviderMedia(ctx context.Context, task Task) (provi
 		return d.resolveDuanjuMedia(ctx, task)
 	}
 	if strings.HasPrefix(chapter.VideoURL, "hongguo-cenc://") {
-		return d.resolveHongguoMedia(ctx, task)
+		return d.resolveHongguoMediaWithFallback(ctx, task)
 	}
 	if chapter.PageURL == "" && (chapter.Source == sourceHuangguoAI || chapter.Source == sourceHuangguoVideo) {
 		if source, sourceID, valid := splitProviderDramaID(task.DramaID); valid {
