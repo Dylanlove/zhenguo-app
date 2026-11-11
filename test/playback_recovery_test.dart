@@ -10,19 +10,21 @@ void main() {
     routeCount: count,
   );
 
-  test('refreshed resolution is retried across all its routes before stopping',
-      () {
-    final recovery = PlaybackRecovery();
-    expect(recovery.next(route(0)), PlaybackRecoveryAction.alternative);
-    expect(recovery.next(route(1)), PlaybackRecoveryAction.alternative);
-    expect(recovery.next(route(2)), PlaybackRecoveryAction.refresh);
-    // 重新解析后应从头完整遍历新线路，而不是只试第一条就放弃。
-    expect(recovery.next(route(0)), PlaybackRecoveryAction.alternative);
-    expect(recovery.next(route(1)), PlaybackRecoveryAction.alternative);
-    expect(recovery.next(route(2)), PlaybackRecoveryAction.stop);
-    recovery.reset();
-    expect(recovery.next(route(0)), PlaybackRecoveryAction.alternative);
-  });
+  test(
+    'refreshed resolution is retried across all its routes before stopping',
+    () {
+      final recovery = PlaybackRecovery();
+      expect(recovery.next(route(0)), PlaybackRecoveryAction.alternative);
+      expect(recovery.next(route(1)), PlaybackRecoveryAction.alternative);
+      expect(recovery.next(route(2)), PlaybackRecoveryAction.refresh);
+      // 重新解析后应从头完整遍历新线路，而不是只试第一条就放弃。
+      expect(recovery.next(route(0)), PlaybackRecoveryAction.alternative);
+      expect(recovery.next(route(1)), PlaybackRecoveryAction.alternative);
+      expect(recovery.next(route(2)), PlaybackRecoveryAction.stop);
+      recovery.reset();
+      expect(recovery.next(route(0)), PlaybackRecoveryAction.alternative);
+    },
+  );
 
   test('one-route sources refresh once without endless retrying', () {
     final recovery = PlaybackRecovery();
@@ -54,33 +56,37 @@ void main() {
     );
   });
 
-  test('a repeated line triggers a fresh resolution instead of an immediate stop',
-      () {
-    final recovery = PlaybackRecovery();
-    expect(recovery.next(route(0)), PlaybackRecoveryAction.alternative);
-    // 回退没有切到新线路（仍是同一条）时改为重新解析，而不是直接放弃。
-    expect(recovery.next(route(0)), PlaybackRecoveryAction.refresh);
-    expect(recovery.next(route(0)), PlaybackRecoveryAction.alternative);
-    expect(recovery.next(route(1)), PlaybackRecoveryAction.alternative);
-    expect(recovery.next(route(2)), PlaybackRecoveryAction.stop);
-  });
+  test(
+    'a repeated line triggers a fresh resolution instead of an immediate stop',
+    () {
+      final recovery = PlaybackRecovery();
+      expect(recovery.next(route(0)), PlaybackRecoveryAction.alternative);
+      // 回退没有切到新线路（仍是同一条）时改为重新解析，而不是直接放弃。
+      expect(recovery.next(route(0)), PlaybackRecoveryAction.refresh);
+      expect(recovery.next(route(0)), PlaybackRecoveryAction.alternative);
+      expect(recovery.next(route(1)), PlaybackRecoveryAction.alternative);
+      expect(recovery.next(route(2)), PlaybackRecoveryAction.stop);
+    },
+  );
 
-  test('recovery starting at a later route tries remaining then re-resolved',
-      () {
-    final recovery = PlaybackRecovery();
-    expect(
-      recovery.next(route(5, count: 7)),
-      PlaybackRecoveryAction.alternative,
-    );
-    expect(recovery.next(route(6, count: 7)), PlaybackRecoveryAction.refresh);
-    for (var index = 0; index < 6; index++) {
+  test(
+    'recovery starting at a later route tries remaining then re-resolved',
+    () {
+      final recovery = PlaybackRecovery();
       expect(
-        recovery.next(route(index, count: 7)),
+        recovery.next(route(5, count: 7)),
         PlaybackRecoveryAction.alternative,
       );
-    }
-    expect(recovery.next(route(6, count: 7)), PlaybackRecoveryAction.stop);
-  });
+      expect(recovery.next(route(6, count: 7)), PlaybackRecoveryAction.refresh);
+      for (var index = 0; index < 6; index++) {
+        expect(
+          recovery.next(route(index, count: 7)),
+          PlaybackRecoveryAction.alternative,
+        );
+      }
+      expect(recovery.next(route(6, count: 7)), PlaybackRecoveryAction.stop);
+    },
+  );
 
   test('site route labels preserve gaps and old plans use their positions', () {
     final plan = PlaybackPlan.fromJson({
