@@ -46,6 +46,7 @@ type hongguoAppClient struct {
 	deviceRegisterURL string
 	playbackDevice    hongguoPlaybackDevice
 	devicePending     *hongguoDeviceCall
+	deviceRefreshAt   time.Time
 	webOnce           sync.Once
 	webDownloader     *Downloader
 	webPending        chan struct{}

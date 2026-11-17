@@ -1,16 +1,59 @@
 package core
 
 import (
+	"bytes"
+	"compress/gzip"
 	"context"
+	"crypto/aes"
+	"crypto/cipher"
+	"crypto/sha512"
 	"encoding/json"
 	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
 )
+
+func validHongguoRegisterEnvelope(raw []byte) bool {
+	if len(raw) < 6+len(hongguoTTPrefix)+aes.BlockSize {
+		return false
+	}
+	if !bytes.Equal(raw[:6], []byte{0x74, 0x63, 0x05, 0x10, 0x00, 0x00}) {
+		return false
+	}
+	offset := 6 + len(hongguoTTPrefix)
+	block, err := aes.NewCipher(hongguoTTKeyIV[:16])
+	if err != nil {
+		return false
+	}
+	data := append([]byte{}, raw[offset:]...)
+	if len(data)%aes.BlockSize != 0 {
+		return false
+	}
+	cipher.NewCBCDecrypter(block, hongguoTTKeyIV[16:32]).CryptBlocks(data, data)
+	if len(data) < sha512.Size+1 {
+		return false
+	}
+	pad := int(data[len(data)-1])
+	if pad < 1 || pad > aes.BlockSize || pad > len(data) {
+		return false
+	}
+	compressed := data[sha512.Size : len(data)-pad]
+	reader, err := gzip.NewReader(bytes.NewReader(compressed))
+	if err != nil {
+		return false
+	}
+	defer reader.Close()
+	plain, err := io.ReadAll(reader)
+	if err != nil {
+		return false
+	}
+	return strings.Contains(string(plain), `"magic_tag":"ss_app_log"`) && strings.Contains(string(plain), `"app_version":"7.3.9.32"`)
+}
 
 func TestHongguoPlaybackRenewsEmptySessionAndReusesRegisteredDevice(t *testing.T) {
 	var models, registrations atomic.Int32
@@ -18,13 +61,14 @@ func TestHongguoPlaybackRenewsEmptySessionAndReusesRegisteredDevice(t *testing.T
 		switch request.URL.Path {
 		case "/register":
 			registrations.Add(1)
-			var body map[string]any
-			_ = json.NewDecoder(request.Body).Decode(&body)
-			header := nestedMap(body, "header")
-			if request.Method != http.MethodPost || request.Header.Get("User-Agent") != hongguoAppUserAgent ||
-				mapString(body, "magic_tag") != "ss_app_log" || mapString(header, "version_code") != "73532" ||
-				len(mapString(header, "openudid")) != 16 || request.URL.Query().Get("req_id") == "" {
-				t.Error("device registration does not match the supplied Python profile")
+			raw, _ := io.ReadAll(request.Body)
+			if request.Method != http.MethodPost || request.Header.Get("User-Agent") != hongguoRegisterUserAgent ||
+				request.Header.Get("Content-Type") != "application/octet-stream;tt-data=a" ||
+				request.Header.Get("log-encode-type") != "gzip" ||
+				request.Header.Get("x-ss-stub") == "" || request.URL.Query().Get("req_id") == "" ||
+				request.URL.Query().Get("tt_data") != "a" ||
+				!validHongguoRegisterEnvelope(raw) {
+				t.Error("device registration does not match the tt-encrypted profile")
 			}
 			_, _ = io.WriteString(writer, `{"device_id_str":"8123456789012345678","install_id_str":"8234567890123456789"}`)
 		case "/novel/player/multi_video_model/v1/":
@@ -184,5 +228,29 @@ func TestHongguoWebSearchKeepsSSRWhenAPIReturnsNoRows(t *testing.T) {
 	entry, err := d.fetchHongguoSearchPage(context.Background(), "示例")
 	if err != nil || len(entry.Dramas) != 1 || entry.Dramas[0].SourceID != "700001" {
 		t.Fatalf("SSR search fallback was lost: %+v, %v", entry, err)
+	}
+}
+
+func TestHongguoDeviceRefreshCooldownAvoidsRepeatedRegistration(t *testing.T) {
+	var registrations atomic.Int32
+	d := sourceFixtureDownloader(t, func(request *http.Request) (*http.Response, error) {
+		registrations.Add(1)
+		return sourceFixtureResponse(request, http.StatusOK, `{"device_id_str":"8123456789012345678","install_id_str":"8234567890123456789"}`), nil
+	})
+	client := d.hongguoClient()
+	client.playbackDevice = hongguoPlaybackDevice{DeviceID: "100000000000000001", InstallID: "100000000000000002"}
+	if _, err := d.hongguoPlaybackSession(context.Background(), "100000000000000001"); err != nil {
+		t.Fatal(err)
+	}
+	client.playbackDevice = hongguoPlaybackDevice{DeviceID: "100000000000000003", InstallID: "100000000000000004"}
+	second, err := d.hongguoPlaybackSession(context.Background(), "100000000000000003")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if registrations.Load() != 1 {
+		t.Fatalf("cooldown did not prevent a second registration: %d", registrations.Load())
+	}
+	if second.DeviceID == "100000000000000003" {
+		t.Fatal("cooldown path reused the rejected device")
 	}
 }
