@@ -3,6 +3,7 @@ module duanjuapp/native
 go 1.24.1
 
 require (
+	github.com/beilunyang/openhongguo v0.3.0
 	github.com/bluenviron/mediacommon/v2 v2.4.3
 	github.com/bogdanfinn/fhttp v0.6.9
 	github.com/bogdanfinn/tls-client v1.16.0

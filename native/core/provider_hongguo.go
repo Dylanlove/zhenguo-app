@@ -232,6 +232,9 @@ func (d *Downloader) resolveHongguoMediaWithFallback(ctx context.Context, task T
 	}
 	chain := []attempt{
 		{"App 高清接口", func(c context.Context) (providerMedia, error) { return d.resolveHongguoMedia(c, task) }},
+		{"SDK 高清接口", func(c context.Context) (providerMedia, error) {
+			return d.resolveHongguoSdkMedia(c, videoID)
+		}},
 		{"网页公开播放", func(c context.Context) (providerMedia, error) {
 			media, err := d.resolveHongguoWebMedia(c, seriesID, videoID)
 			if err != nil {
