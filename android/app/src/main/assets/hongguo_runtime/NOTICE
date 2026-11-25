@@ -1,0 +1,5 @@
+MetaSec ML runtime from Hongguo com.phoenix.read 6.9.5.32.
+SDK and public APK signing certificate retain the original owner's rights.
+The public certificate is not a private signing key.
+No original application installation or external signing service is required.
+Fixed input hashes and offsets are recorded in component.json.

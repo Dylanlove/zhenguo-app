@@ -43,6 +43,9 @@ func newHongguoPlaybackEntropy() (hongguoPlaybackEntropy, error) {
 }
 
 func signHongguoPlaybackRequest(request *http.Request, body []byte, deviceID string, now time.Time, entropy hongguoPlaybackEntropy) {
+	if applyHongguoRuntimeSignature(request, body) {
+		return
+	}
 	timestamp := uint32(now.Unix())
 	var little, big [4]byte
 	binary.LittleEndian.PutUint32(little[:], timestamp)

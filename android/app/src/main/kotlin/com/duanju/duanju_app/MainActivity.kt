@@ -179,6 +179,7 @@ class MainActivity : FlutterActivity() {
         televisionMode = if (savedInstanceState?.containsKey("duanju.televisionMode") == true) {
             savedInstanceState.getBoolean("duanju.televisionMode")
         } else isTelevisionDevice()
+        HongguoRuntime.bootstrap(this)
         super.onCreate(savedInstanceState)
         if (televisionMode) requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {

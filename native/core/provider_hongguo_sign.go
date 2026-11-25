@@ -21,6 +21,9 @@ func newHongguoDeviceID() string {
 }
 
 func signHongguoRequest(request *http.Request, body []byte, now time.Time) {
+	if applyHongguoRuntimeSignature(request, body) {
+		return
+	}
 	timestamp := uint32(now.Unix())
 	queryHash := md5.Sum([]byte(request.URL.RawQuery))
 	var payload [20]byte
