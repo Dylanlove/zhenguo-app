@@ -377,7 +377,7 @@ public class MS extends f0 {
             if (!Boolean.TRUE.equals(initialized)) {
                 return 43;
             }
-            Object handle = ms.bd.c.m.a(67108866, 0, 0, config.getString("appId"), null);
+            Object handle = ms.bd.c.m.a(67108866, 0, 0, config.optString("appId"), null);
             if (handle instanceof Long) {
                 long value = (Long) handle;
                 if (value != -1 && value != 0 && managerHandle == 0) {
