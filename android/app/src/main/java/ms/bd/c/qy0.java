@@ -1,3 +1,6 @@
+package ms.bd.c;
+
+import com.bytedance.mobsec.metasec.ml.MS;
 import android.accessibilityservice.AccessibilityServiceInfo;
 import android.app.KeyguardManager;
 import android.content.Context;

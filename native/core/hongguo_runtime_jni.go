@@ -23,7 +23,7 @@ static char *hongguoRuntimeSignCall(const char *identity, const char *fields) {
     jint status = (*duanjuJavaVM)->GetEnv(duanjuJavaVM, (void **)&env, JNI_VERSION_1_6);
     int attached = 0;
     if (status == JNI_EDETACHED) {
-        if ((*duanjuJavaVM)->AttachCurrentThread(duanjuJavaVM, (void **)&env, NULL) != JNI_OK) {
+        if ((*duanjuJavaVM)->AttachCurrentThread(duanjuJavaVM, &env, NULL) != JNI_OK) {
             return NULL;
         }
         attached = 1;

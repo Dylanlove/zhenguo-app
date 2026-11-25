@@ -1,3 +1,5 @@
+package ms.bd.c;
+
 import android.content.Context;
 import android.content.ContextWrapper;
 import android.content.pm.ApplicationInfo;

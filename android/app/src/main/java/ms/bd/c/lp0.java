@@ -1,3 +1,6 @@
+package ms.bd.c;
+
+import com.bytedance.mobsec.metasec.ml.MS;
 import android.content.Context;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
