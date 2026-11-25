@@ -11,6 +11,10 @@ extern JavaVM *duanjuJavaVM;
 extern jclass duanjuMetasecClass;
 extern jmethodID duanjuMetasecSignMethod;
 
+static int hongguoRuntimeReadyC(void) {
+    return duanjuJavaVM != NULL && duanjuMetasecClass != NULL && duanjuMetasecSignMethod != NULL;
+}
+
 static char *hongguoRuntimeSignCall(const char *identity, const char *fields) {
     if (duanjuJavaVM == NULL || duanjuMetasecClass == NULL || duanjuMetasecSignMethod == NULL) {
         return NULL;
@@ -57,7 +61,7 @@ import "C"
 import "unsafe"
 
 func hongguoRuntimeAvailable() bool {
-    return C.duanjuJavaVM != nil && C.duanjuMetasecClass != nil && C.duanjuMetasecSignMethod != nil
+    return C.hongguoRuntimeReadyC() != 0
 }
 
 func hongguoRuntimeSign(identity, fields string) string {
