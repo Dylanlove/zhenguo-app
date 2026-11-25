@@ -1,3 +1,5 @@
+#if defined(__ANDROID__)
+
 #include <jni.h>
 
 JavaVM *duanjuJavaVM = NULL;
@@ -26,3 +28,9 @@ jint JNI_OnLoad(JavaVM *vm, void *reserved) {
     }
     return JNI_VERSION_1_6;
 }
+
+#else
+
+typedef int duanju_jni_placeholder;
+
+#endif
