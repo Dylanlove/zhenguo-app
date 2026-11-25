@@ -164,9 +164,9 @@ public class MS extends f0 {
                 String[] parts = payload.split(Pattern.quote(separator), 2);
                 if (parts.length == 2) {
                     Object[] list = args instanceof Object[] ? (Object[]) args : null;
-                    String value = list != null && list.length > 0 && list[0] instanceof String ? (String) list[0] : null;
+                    String stored = list != null && list.length > 0 && list[0] instanceof String ? (String) list[0] : null;
                     SharedPreferences.Editor editor = context.getSharedPreferences(parts[0], 0).edit();
-                    editor.putString(parts[1], value);
+                    editor.putString(parts[1], stored);
                     editor.commit();
                     return null;
                 }
